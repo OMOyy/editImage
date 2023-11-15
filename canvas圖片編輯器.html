@@ -1,0 +1,505 @@
+<html>
+  <head>
+    <title>Canvas 圖片編輯器</title>
+    <script type="text/javascript">
+      function draw() {       
+        const canvas = document.getElementById('myCanvas');
+        const ctx = canvas.getContext('2d');
+        const imageInput = document.getElementById('backgroundImage');
+
+        // 設定畫布尺寸
+        canvas.width = 1200;
+        canvas.height = 900;
+
+        let backgroundImage = new Image();
+        let overlayImages = [];
+        const deletIcon = new Image();
+        deletIcon.src = 'cross-circle.png';
+        const zoomIcon = new Image();
+        zoomIcon.src = 'arrow-up-right-and-arrow-down-left-from-center.png';
+
+        let isDragging = false;
+        let isClick = false;
+        let selectedOverlayIndex = -1;
+        let resizing = false;
+
+        let initialWidth, initialHeight;
+        let mouseX, mouseY;
+        let scaleHandleRadius = 15;
+        const deleteIconSize = 30;
+        //畫矩形框
+        let isRectangle = false; 
+        let isDrawingRectangle = false;
+        let rectangleStartX, rectangleStartY, rectangleEndX, rectangleEndY;
+
+
+        //裁切
+        let isCropping = false;
+        let cropStartX, cropStartY, cropWidth, cropHeight;
+        let isImageLoaded = false;
+
+
+        //文字編輯        
+        let isText = false;
+        let isDrawing = false;
+        let userX = 0; 
+        let userY = 0; 
+        var mouseImg = document.querySelector('.mouseImg');
+        const fontSize = 18;
+        const point = [0, backgroundImage.height / 2];
+        let inputs = [""];       
+        
+         //繪製圖像於畫布上
+         function drawImageOnCanvas(image, x, y, width, height) {
+            ctx.drawImage(image, x, y, width, height);
+        }
+        //清空畫布
+        function clearCanvas() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+        }
+
+        function handleMouseDown(e) {
+             mouseX = e.clientX - canvas.getBoundingClientRect().left;
+             mouseY = e.clientY - canvas.getBoundingClientRect().top;
+            //畫矩形框
+            if(isRectangle){
+                rectangleStartX = mouseX;
+                rectangleStartY = mouseY;
+                isDrawingRectangle = true;
+            } else {
+            for (let i = overlayImages.length - 1; i >= 0; i--) {
+                const overlay = overlayImages[i];
+                //確定滑鼠在該圖檔上點擊
+                if (
+                    mouseX >= overlay.x + deleteIconSize/2 &&
+                    mouseX <= overlay.x + overlay.image.width - scaleHandleRadius &&
+                    mouseY >= overlay.y  &&
+                    mouseY <= overlay.y + overlay.image.height
+                ) {
+                    isDragging = true;
+                    selectedOverlayIndex = overlayImages.length - 1;
+                    // 將被點擊的圖層移至陣列的最頂部
+                    overlayImages.push(overlayImages.splice(i, 1)[0]);                    
+                    isClick = true;//縮放功能 - 邊框
+                    break;
+                }
+
+                //縮放功能
+                const scaledWidth = overlay.image.width;
+                const scaledHeight = overlay.image.height;
+                const scaleHandleX = overlay.x + scaledWidth;
+                const scaleHandleY = overlay.y + scaledHeight;
+                if (
+                    mouseX >= scaleHandleX - scaleHandleRadius &&
+                    mouseX <= scaleHandleX + scaleHandleRadius &&
+                    mouseY >= scaleHandleY - scaleHandleRadius &&
+                    mouseY <= scaleHandleY + scaleHandleRadius
+                ) {
+                    resizing = true;
+                    selectedOverlayIndex = i;
+                    initialWidth = overlay.image.width;
+                    initialHeight = overlay.image.height;
+                    break;
+                }
+                //刪除功能
+                const deleteIconX = overlay.x;
+                const deleteIconY = overlay.y;
+                if (
+                    mouseX >= deleteIconX - deleteIconSize/2  &&
+                    mouseX <= deleteIconX + deleteIconSize/2  &&
+                    mouseY >= deleteIconY - deleteIconSize/2  &&
+                    mouseY <= deleteIconY + deleteIconSize/2 
+                ) {
+                    // 在點擊到刪除圖案時，執行刪除該圖層的操作
+                    overlayImages.splice(i, 1);
+                    redrawCanvas();
+                    break;
+                }
+            }       
+        }     
+            redrawCanvas();
+            
+            //點擊後繪製 邊框、縮放按鈕、刪除按鈕
+            if (isClick && selectedOverlayIndex !== -1){
+                const overlay = overlayImages[selectedOverlayIndex];
+                ctx.strokeRect(overlay.x, overlay.y, overlay.image.width, overlay.image.height);
+                const scaledWidth = overlay.image.width;
+                const scaledHeight = overlay.image.height;
+                drawScaleHandle(overlay.x + scaledWidth, overlay.y + scaledHeight);
+                drawDeleteIcon( overlay.x,overlay.y);                
+            }                        
+        }
+        
+        function handleMouseUp(e) {
+            isDragging = false;
+            resizing = false;
+            selectedOverlayIndex = -1;
+            if (isDrawingRectangle) {
+                isDrawingRectangle = false;
+                const mouseX = e.clientX - canvas.getBoundingClientRect().left;
+                const mouseY = e.clientY - canvas.getBoundingClientRect().top;
+                rectangleEndX = mouseX;
+                rectangleEndY = mouseY;
+
+                // Create a new overlay image from the drawn rectangle
+                const rectCanvas = document.createElement('canvas');
+                rectCanvas.width = Math.abs(rectangleEndX - rectangleStartX);
+                rectCanvas.height = Math.abs(rectangleEndY - rectangleStartY);
+                const rectCtx = rectCanvas.getContext('2d');
+                drawRectangle(rectCtx,rectangleStartX, rectangleStartY, rectangleEndX, rectangleEndY);                
+                //overlayImages.push({number:j, image: rectCanvas, x: rectangleStartX, y: rectangleStartY, width:rectCanvas.width, height:rectCanvas.height , });j++;
+                isRectangle = false;
+                //redrawCanvas(); 
+            }
+        }
+        
+        function handleMouseMove(e) {            
+            //移動功能
+            if (isDragging && selectedOverlayIndex !== -1) {
+                const overlay = overlayImages[selectedOverlayIndex];
+                overlay.x = e.clientX - canvas.getBoundingClientRect().left - overlay.image.width / 2;
+                overlay.y = e.clientY - canvas.getBoundingClientRect().top - overlay.image.height / 2;
+                redrawCanvas();console.log("拖動圖層");
+            }else if (isDrawingRectangle) {//畫矩形框
+                redrawCanvas();
+                drawRectangle(rectangleStartX, rectangleStartY, mouseX, mouseY);
+            }
+            //縮放功能 
+            if (resizing && selectedOverlayIndex !== -1) {
+                mouseX = e.clientX - canvas.getBoundingClientRect().left;
+                mouseY = e.clientY - canvas.getBoundingClientRect().top;
+                const overlay = overlayImages[selectedOverlayIndex];
+                const deltaX = mouseX - (overlay.x + overlay.image.width);
+                const deltaY = mouseY - (overlay.y + overlay.image.height);
+                const newWidth = initialWidth + deltaX;
+                const newHeight = initialHeight + deltaY;
+                overlay.image.width = newWidth;
+                overlay.image.height = newHeight;
+                redrawCanvas();console.log("縮放圖層");
+            }
+            //文字圖標
+            /*if (isDrawing && isText) {
+                    userX = e.clientX ;
+                    userY = e.clientY ;
+                    mouseImg.style.left = userX + 'px';
+                    mouseImg.style.top = userY + 'px';
+                }   */                    
+        }
+        /*function handleMouseClick(e){
+            console.log("owo");console.log(isText);
+            if(isText && isImageLoaded){
+                    userX = e.clientX - canvas.getBoundingClientRect().left;
+                    userY = e.clientY - canvas.getBoundingClientRect().top;
+                    
+                    window.addEventListener("keyup", e => {
+                        if (e.key === "Backspace") {
+                            delText();
+                        } else handleDrawText(e.key);
+                        });
+                    }        
+        }
+        function handleMouseEnter(e){
+            if(isText){
+                isDrawing = true;
+                canvas.style.cursor = 'none';
+            }            
+        }
+        function handleMouseLeave(e){
+            if(isText){
+                isDrawing = false;
+                canvas.style.cursor = 'auto';
+            }            
+        }       */
+        /*-----------------------------------------------------Function-----------------------------------------------------*/
+        function redrawCanvas() {
+            clearCanvas();
+            // 計算等比例缩放比例
+            const scale = Math.min(canvas.width / backgroundImage.width, canvas.height / backgroundImage.height);
+            const scaledWidth = backgroundImage.width * scale;
+            let scaledHeight = backgroundImage.height * scale;
+            if(backgroundImage.height < canvas.height){
+                scaledHeight = backgroundImage.height;
+            }      
+            drawImageOnCanvas(backgroundImage, 0, 0, scaledWidth, scaledHeight);
+            for (const overlay of overlayImages) {
+                const scaledWidth = overlay.image.width;
+                const scaledHeight = overlay.image.height;
+                drawImageOnCanvas(overlay.image, overlay.x, overlay.y, scaledWidth, scaledHeight);
+                
+            }
+        }
+        function zoomInImage(){
+            if(isImageLoaded){
+                const scale =  100;
+                canvas.width = canvas.width + scale;
+                canvas.height = canvas.height + scale;
+                redrawCanvas();                
+            }            
+        }
+        function zoomOutImage(){
+            if(isImageLoaded){
+                const scale =  100;
+                canvas.width = canvas.width - scale;
+                canvas.height = canvas.height - scale;
+                redrawCanvas();
+            }            
+        }
+         //編輯文字
+         function EditText (e) {   
+            isText = true; console.log(isText);            
+        };
+        //畫矩形框        
+        function IsdrawRectangle(){
+            isDrawingRectangle = true;
+        }
+        function drawRectangle(canvas,startX, startY, endX, endY) {
+            canvas.beginPath();
+            canvas.rect(startX, startY, endX - startX, endY - startY);
+            canvas.strokeStyle = 'red';
+            canvas.lineWidth = 2;
+            canvas.stroke();
+            canvas.closePath();
+        }
+        function saveImage() {
+            var dataURL = canvas.toDataURL('image/png');
+
+            var link = document.createElement('a');
+            link.href = dataURL;
+            link.download = 'canvas_image.png';
+            //開始下載
+            link.click();
+        }
+        /*---------------------------------------------------------------------------------------------------------------------*/        
+        /*------------------------------------------------------功能圖示按鈕繪畫---------------------------------------------------------------------------*/        
+        function drawScaleHandle(x, y) {
+            ctx.beginPath();
+            ctx.arc(x, y, scaleHandleRadius, 0, Math.PI * 2);//arc(x, y, radius, startAngle, endAngle, anticlockwise) 
+            ctx.fillStyle = 'white';
+            ctx.fill();
+            drawImageOnCanvas(zoomIcon, x-(scaleHandleRadius/2), y-(scaleHandleRadius/2), scaleHandleRadius, scaleHandleRadius);
+            ctx.closePath();
+        }
+
+        function drawDeleteIcon(x, y) {
+            ctx.beginPath();
+            ctx.arc(x, y, deleteIconSize/2, 0, Math.PI * 2);
+            ctx.fillStyle = 'white';
+            ctx.fill();
+            drawImageOnCanvas(deletIcon, x-(deleteIconSize/2), y-(deleteIconSize/2), deleteIconSize, deleteIconSize);
+            ctx.closePath();
+        }
+
+        function deleteSelectedOverlay() {
+            if (selectedOverlayIndex !== -1) {
+                overlayImages.splice(selectedOverlayIndex, 1);
+                selectedOverlayIndex = -1;
+                redrawCanvas();
+            }
+        }
+         /*--------------------------------------------------------------------------------------------------------------------------------------------------*/
+        backgroundImage.onload = function () {            
+            clearCanvas();          
+            //drawImageOnCanvas(backgroundImage, 0, 0, scaledWidth, scaledHeight);console.log(scaledHeight);
+            redrawCanvas(); 
+            isImageLoaded = true; 
+        };
+
+        overlayImage.onload = function () {
+            drawImageOnCanvas(overlayImage, 50, 50, overlayImage.width, overlayImage.height); 
+        };
+
+        document.getElementById('backgroundImage').addEventListener('change', function (e) {
+            const file = e.target.files[0];
+            if (file) {
+                backgroundImage.src = URL.createObjectURL(file);// 設定圖像的src為選擇的圖像文件                
+            }
+        });
+        //圖層
+        var j = 0;
+        document.getElementById('overlayImage').addEventListener('change', function (e) {
+            const file = e.target.files[0];
+            if (file) {
+                const newOverlay = new Image();
+                newOverlay.src = URL.createObjectURL(file);
+                overlayImages.push({number:j, image: newOverlay, x: 50, y: 50 });j++;
+                newOverlay.onload = function () {
+                    redrawCanvas();
+                };
+        }});
+        //裁切功能
+        //document.getElementById('cropImage').addEventListener('click', cropImage);
+        document.getElementById('zoomIn').addEventListener('click', zoomInImage);
+        document.getElementById('zoomOut').addEventListener('click', zoomOutImage);
+        //文字編輯功能
+        document.getElementById('drawTextButton').addEventListener('change',EditText);
+        //畫矩形框
+        document.getElementById('drawRectangle').addEventListener('click',IsdrawRectangle);
+
+        canvas.addEventListener('mousedown', handleMouseDown);
+        canvas.addEventListener('mouseup', handleMouseUp);
+        canvas.addEventListener('mousemove', handleMouseMove);
+        //canvas.addEventListener('click', handleMouseClick);
+        //canvas.addEventListener('mouseenter', handleMouseEnter);
+        //canvas.addEventListener('mouseleave', handleMouseLeave);
+
+        /*做一點樣式動畫*//*
+        const menu = body.querySelector(".menu");
+        const menuItems = menu.querySelectorAll(".menu__item");
+        const menuBorder = menu.querySelector(".menu__border");
+        let activeItem = menu.querySelector(".active");
+        function clickItem(item, index) {
+
+            //menu.style.removeProperty("--timeOut");
+
+            if (activeItem == item) return;
+
+            if (activeItem) {
+                activeItem.classList.remove("active");
+            }
+
+
+            item.classList.add("active");
+            //body.style.backgroundColor = bgColorsBody[index];
+            activeItem = item;
+            offsetMenuBorder(activeItem, menuBorder);
+            }
+
+        function offsetMenuBorder(element, menuBorder) {
+            const offsetActiveItem = element.getBoundingClientRect();
+            const left = Math.floor(offsetActiveItem.left - menu.offsetLeft - (menuBorder.offsetWidth  - offsetActiveItem.width) / 2) +  "px";
+            menuBorder.style.transform = `translate3d(${left}, 0 , 0)`;
+        }
+
+offsetMenuBorder(activeItem, menuBorder);
+
+menuItems.forEach((item, index) => {
+
+    item.addEventListener("click", () => clickItem(item, index));
+
+})*/
+        }
+    </script>
+    <style type="text/css">
+      canvas {
+        border: 1px solid white;
+      }
+      
+      .button{
+        font-weight: 600;
+        cursor: pointer;
+        vertical-align: middle;
+        letter-spacing: .3px;
+        text-align: center;
+        font-family: 'Noto Sans', sans-serif;
+        width: 150px;
+        height: 35px;letter-spacing: 2px;cursor: pointer;padding: 0;
+        outline: none;
+      }
+      .menu__border{
+        content: "";
+        z-index: -1;
+        width: 4.2em;
+        height: 4.2em;
+        border-radius: 50%;
+        position: absolute;
+        transform: scale(0);
+        transition: background-color var(--duration), transform var(--duration);
+      }
+      .mouseImg{
+            position: fixed; /*讓游標圖案隨網頁移動*/
+            /*沒有設定top/left等等是因為要用js控制*/
+        }
+    </style>
+  </head>
+  <body onload="draw();" >
+    <!--排版一下-->
+    <div style="margin: 0px auto 20px auto;max-width:1200px;">
+        <div style="width: 100%;height:100%;margin: 20px;    ">
+            <div style="padding: 0px; vertical-align: middle;align-items: center;justify-content: space-between!important; display: flex; ">
+                <div style="width: 30%; ">
+                    <h1 style="padding-top: 0; color: #fbbb3c;font-family: 'Noto Sans', sans-serif;"> Image Editor</h1>
+                </div>                
+                <div style="padding: 25px; ">
+                    <div >
+                        <button class="button" type="button" style="background-color: white; border:1px solid #fbbb3c;border-radius: 50px;text-align: center;margin:0px 20px ;">SAVE</button>
+                        <button class="button"onclick="saveImage()" type="button" style="background-color:#fbbb3c;border: none; border-radius: 50px;color: white;text-align: center;">完成輸出</button>
+                    </div>          
+                </div>
+                
+            </div>
+            <div style="display: flex;">                      
+                <div class="menu" style="height: 40px; display: flex; background-color: white;border:1px solid #fbbb3c; border-radius: 25px;margin:25px 0px 25px 0px;">
+                    <div style="padding: 0px 25px; display: flex;">
+                        <div  style="padding: 10px;">
+                            <label>
+                                <svg xmlns="http://www.w3.org/2000/svg" width="25" height="25" fill="currentColor" class="bi bi-images" viewBox="0 0 16 16">
+                                    <path d="M4.502 9a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3z"/>
+                                    <path d="M14.002 13a2 2 0 0 1-2 2h-10a2 2 0 0 1-2-2V5A2 2 0 0 1 2 3a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v8a2 2 0 0 1-1.998 2zM14 2H4a1 1 0 0 0-1 1h9.002a2 2 0 0 1 2 2v7A1 1 0 0 0 15 11V3a1 1 0 0 0-1-1zM2.002 4a1 1 0 0 0-1 1v8l2.646-2.354a.5.5 0 0 1 .63-.062l2.66 1.773 3.71-3.71a.5.5 0 0 1 .577-.094l1.777 1.947V5a1 1 0 0 0-1-1h-10z"/>
+                                  </svg>
+                                <input type="file" id="overlayImage" accept="image/*"style="width:1px;height:1px;">
+                                </label>    
+                        </div>
+                        <div style="padding: 10px;">
+                            <label id="zoomIn"><svg xmlns="http://www.w3.org/2000/svg" width="25" height="25" fill="currentColor" class="bi bi-zoom-in" viewBox="0 0 16 16">
+                                <path fill-rule="evenodd" d="M6.5 12a5.5 5.5 0 1 0 0-11 5.5 5.5 0 0 0 0 11zM13 6.5a6.5 6.5 0 1 1-13 0 6.5 6.5 0 0 1 13 0z"/>
+                                <path d="M10.344 11.742c.03.04.062.078.098.115l3.85 3.85a1 1 0 0 0 1.415-1.414l-3.85-3.85a1.007 1.007 0 0 0-.115-.1 6.538 6.538 0 0 1-1.398 1.4z"/>
+                                <path fill-rule="evenodd" d="M6.5 3a.5.5 0 0 1 .5.5V6h2.5a.5.5 0 0 1 0 1H7v2.5a.5.5 0 0 1-1 0V7H3.5a.5.5 0 0 1 0-1H6V3.5a.5.5 0 0 1 .5-.5z"/>
+                              </svg></label>       
+                        </div>
+                        <div  style="padding: 10px;">
+                            <label id="zoomOut"><svg xmlns="http://www.w3.org/2000/svg" width="25" height="25" fill="currentColor" class="bi bi-zoom-out" viewBox="0 0 16 16">
+                                <path fill-rule="evenodd" d="M6.5 12a5.5 5.5 0 1 0 0-11 5.5 5.5 0 0 0 0 11zM13 6.5a6.5 6.5 0 1 1-13 0 6.5 6.5 0 0 1 13 0z"/>
+                                <path d="M10.344 11.742c.03.04.062.078.098.115l3.85 3.85a1 1 0 0 0 1.415-1.414l-3.85-3.85a1.007 1.007 0 0 0-.115-.1 6.538 6.538 0 0 1-1.398 1.4z"/>
+                                <path fill-rule="evenodd" d="M3 6.5a.5.5 0 0 1 .5-.5h6a.5.5 0 0 1 0 1h-6a.5.5 0 0 1-.5-.5z"/>
+                              </svg></label>       
+                        </div>     
+                        <div class="menu__item" style="padding: 10px;">
+                            <label id="cropImage"><svg xmlns="http://www.w3.org/2000/svg" width="25" height="25" fill="currentColor" class="bi bi-scissors" viewBox="0 0 16 16">
+                                <path d="M3.5 3.5c-.614-.884-.074-1.962.858-2.5L8 7.226 11.642 1c.932.538 1.472 1.616.858 2.5L8.81 8.61l1.556 2.661a2.5 2.5 0 1 1-.794.637L8 9.73l-1.572 2.177a2.5 2.5 0 1 1-.794-.637L7.19 8.61 3.5 3.5zm2.5 10a1.5 1.5 0 1 0-3 0 1.5 1.5 0 0 0 3 0zm7 0a1.5 1.5 0 1 0-3 0 1.5 1.5 0 0 0 3 0z"/>
+                              </svg></label>       
+                        </div>
+                        <div class="menu__item" style="padding: 10px;">
+                            <label><svg xmlns="http://www.w3.org/2000/svg" width="25" height="25" fill="currentColor" class="bi bi-marker-tip" viewBox="0 0 16 16">
+                                <path d="M16 8A8 8 0 1 1 0 8a8 8 0 0 1 16 0Zm-4.5 6.064-1.281-4.696A.5.5 0 0 0 9.736 9H6.264a.5.5 0 0 0-.483.368l-1.28 4.696A6.968 6.968 0 0 0 8 15c1.275 0 2.47-.34 3.5-.936Zm.873-.598a7 7 0 1 0-8.746 0l1.19-4.36a1.5 1.5 0 0 1 1.31-1.1l1.155-3.851c.213-.713 1.223-.713 1.436 0l1.156 3.851a1.5 1.5 0 0 1 1.31 1.1l1.189 4.36Z"/>
+                              </svg></label>
+                        </div>
+                        <div class="menu__item" style="padding: 10px;">
+                            <label><svg xmlns="http://www.w3.org/2000/svg" width="25" height="25" fill="currentColor" class="bi bi-highlighter" viewBox="0 0 16 16">
+                                <path fill-rule="evenodd" d="M11.096.644a2 2 0 0 1 2.791.036l1.433 1.433a2 2 0 0 1 .035 2.791l-.413.435-8.07 8.995a.5.5 0 0 1-.372.166h-3a.5.5 0 0 1-.234-.058l-.412.412A.5.5 0 0 1 2.5 15h-2a.5.5 0 0 1-.354-.854l1.412-1.412A.5.5 0 0 1 1.5 12.5v-3a.5.5 0 0 1 .166-.372l8.995-8.07.435-.414Zm-.115 1.47L2.727 9.52l3.753 3.753 7.406-8.254-2.905-2.906Zm3.585 2.17.064-.068a1 1 0 0 0-.017-1.396L13.18 1.387a1 1 0 0 0-1.396-.018l-.068.065 2.85 2.85ZM5.293 13.5 2.5 10.707v1.586L3.707 13.5h1.586Z"/>
+                              </svg></label>
+                        </div>      
+                        <div class="menu__item" style="padding: 10px;">
+                            <label id="drawTextButton"><svg xmlns="http://www.w3.org/2000/svg" width="25" height="25" fill="currentColor" class="bi bi-fonts" viewBox="0 0 16 16">
+                                <path d="M12.258 3h-8.51l-.083 2.46h.479c.26-1.544.758-1.783 2.693-1.845l.424-.013v7.827c0 .663-.144.82-1.3.923v.52h4.082v-.52c-1.162-.103-1.306-.26-1.306-.923V3.602l.431.013c1.934.062 2.434.301 2.693 1.846h.479L12.258 3z"/>
+                              </svg></label>
+                        </div>
+                        <div class="menu__item" style="padding: 10px;">
+                            <label id="drawRectangle"><svg xmlns="http://www.w3.org/2000/svg" width="25" height="25" fill="currentColor" class="bi bi-square" viewBox="0 0 16 16">
+                                <path d="M14 1a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H2a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1h12zM2 0a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V2a2 2 0 0 0-2-2H2z"/>
+                              </svg></label>
+                        </div>
+                        <div class="menu__border"></div>                        
+                    </div>
+                </div>
+            </div>           
+            <div style="text-align: center;">
+                <label><svg xmlns="http://www.w3.org/2000/svg" width="50" height="50" fill="currentColor" class="bi bi-plus-square-dotted" viewBox="0 0 16 16">
+                <path d="M2.5 0c-.166 0-.33.016-.487.048l.194.98A1.51 1.51 0 0 1 2.5 1h.458V0H2.5zm2.292 0h-.917v1h.917V0zm1.833 0h-.917v1h.917V0zm1.833 0h-.916v1h.916V0zm1.834 0h-.917v1h.917V0zm1.833 0h-.917v1h.917V0zM13.5 0h-.458v1h.458c.1 0 .199.01.293.029l.194-.981A2.51 2.51 0 0 0 13.5 0zm2.079 1.11a2.511 2.511 0 0 0-.69-.689l-.556.831c.164.11.305.251.415.415l.83-.556zM1.11.421a2.511 2.511 0 0 0-.689.69l.831.556c.11-.164.251-.305.415-.415L1.11.422zM16 2.5c0-.166-.016-.33-.048-.487l-.98.194c.018.094.028.192.028.293v.458h1V2.5zM.048 2.013A2.51 2.51 0 0 0 0 2.5v.458h1V2.5c0-.1.01-.199.029-.293l-.981-.194zM0 3.875v.917h1v-.917H0zm16 .917v-.917h-1v.917h1zM0 5.708v.917h1v-.917H0zm16 .917v-.917h-1v.917h1zM0 7.542v.916h1v-.916H0zm15 .916h1v-.916h-1v.916zM0 9.375v.917h1v-.917H0zm16 .917v-.917h-1v.917h1zm-16 .916v.917h1v-.917H0zm16 .917v-.917h-1v.917h1zm-16 .917v.458c0 .166.016.33.048.487l.98-.194A1.51 1.51 0 0 1 1 13.5v-.458H0zm16 .458v-.458h-1v.458c0 .1-.01.199-.029.293l.981.194c.032-.158.048-.32.048-.487zM.421 14.89c.183.272.417.506.69.689l.556-.831a1.51 1.51 0 0 1-.415-.415l-.83.556zm14.469.689c.272-.183.506-.417.689-.69l-.831-.556c-.11.164-.251.305-.415.415l.556.83zm-12.877.373c.158.032.32.048.487.048h.458v-1H2.5c-.1 0-.199-.01-.293-.029l-.194.981zM13.5 16c.166 0 .33-.016.487-.048l-.194-.98A1.51 1.51 0 0 1 13.5 15h-.458v1h.458zm-9.625 0h.917v-1h-.917v1zm1.833 0h.917v-1h-.917v1zm1.834-1v1h.916v-1h-.916zm1.833 1h.917v-1h-.917v1zm1.833 0h.917v-1h-.917v1zM8.5 4.5a.5.5 0 0 0-1 0v3h-3a.5.5 0 0 0 0 1h3v3a.5.5 0 0 0 1 0v-3h3a.5.5 0 0 0 0-1h-3v-3z"/>
+              </svg><h3>上傳底圖</h3><input type="file" id="backgroundImage" accept="image/*"style="width:1px;height:1px;"></label>
+            <canvas id="myCanvas"  ></canvas>
+            <div class="mouseImg"><!--插入游標圖案-->
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-cursor-text" viewBox="0 0 16 16">
+                    <path d="M5 2a.5.5 0 0 1 .5-.5c.862 0 1.573.287 2.06.566.174.099.321.198.44.286.119-.088.266-.187.44-.286A4.165 4.165 0 0 1 10.5 1.5a.5.5 0 0 1 0 1c-.638 0-1.177.213-1.564.434a3.49 3.49 0 0 0-.436.294V7.5H9a.5.5 0 0 1 0 1h-.5v4.272c.1.08.248.187.436.294.387.221.926.434 1.564.434a.5.5 0 0 1 0 1 4.165 4.165 0 0 1-2.06-.566A4.561 4.561 0 0 1 8 13.65a4.561 4.561 0 0 1-.44.285 4.165 4.165 0 0 1-2.06.566.5.5 0 0 1 0-1c.638 0 1.177-.213 1.564-.434.188-.107.335-.214.436-.294V8.5H7a.5.5 0 0 1 0-1h.5V3.228a3.49 3.49 0 0 0-.436-.294A3.166 3.166 0 0 0 5.5 2.5.5.5 0 0 1 5 2zm3.352 1.355zm-.704 9.29z"/>
+                  </svg>
+            </div>
+            </div>
+        </div>
+    </div>
+
+    
+
+    
+
+    
+  </body>
+</html>
