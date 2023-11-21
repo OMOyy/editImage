@@ -6,7 +6,7 @@
         const canvas = document.getElementById('myCanvas');
         const ctx = canvas.getContext('2d');
         const imageInput = document.getElementById('backgroundImage');
-
+        
         // 設定畫布尺寸
         canvas.width = 1200;
         canvas.height = 900;
@@ -22,6 +22,7 @@
         let isClick = false;
         let selectedOverlayIndex = -1;
         let resizing = false;
+        let rotationAngle = 0;
 
         let initialWidth, initialHeight;
         let mouseX, mouseY;
@@ -31,8 +32,6 @@
         let isRectangle = false; 
         let isDrawingRectangle = false;
         let rectangleStartX, rectangleStartY, rectangleEndX, rectangleEndY;
-
-
         //裁切
         let isCropping = false;
         let cropStartX, cropStartY, cropWidth, cropHeight;
@@ -45,18 +44,13 @@
         let userX = 0; 
         let userY = 0; 
         var mouseImg = document.querySelector('.mouseImg');
-        const fontSize = 18;
+        const fontSize = 24;
         const point = [0, backgroundImage.height / 2];
-        let inputs = [""];       
+        let inputs = [""];   
+        let width = 700;
+        let height = 500;    
         
-         //繪製圖像於畫布上
-         function drawImageOnCanvas(image, x, y, width, height) {
-            ctx.drawImage(image, x, y, width, height);
-        }
-        //清空畫布
-        function clearCanvas() {
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-        }
+        
 
         function handleMouseDown(e) {
              mouseX = e.clientX - canvas.getBoundingClientRect().left;
@@ -66,62 +60,68 @@
                 rectangleStartX = mouseX;
                 rectangleStartY = mouseY;
                 isDrawingRectangle = true;
+            }else if(isText){
+                width = mouseX;
+                height = mouseY;
+                //const interPoint = new InterPoint(ctx, 3, fontSize, 500);//(ctx, lineWidth, lineHength, delay)
+                TextListener();
             } else {
-            for (let i = overlayImages.length - 1; i >= 0; i--) {
-                const overlay = overlayImages[i];
-                //確定滑鼠在該圖檔上點擊
-                if (
-                    mouseX >= overlay.x + deleteIconSize/2 &&
-                    mouseX <= overlay.x + overlay.image.width - scaleHandleRadius &&
-                    mouseY >= overlay.y  &&
-                    mouseY <= overlay.y + overlay.image.height
-                ) {
-                    isDragging = true;
-                    selectedOverlayIndex = overlayImages.length - 1;
-                    // 將被點擊的圖層移至陣列的最頂部
-                    overlayImages.push(overlayImages.splice(i, 1)[0]);                    
-                    isClick = true;//縮放功能 - 邊框
-                    break;
-                }
+                for (let i = overlayImages.length - 1; i >= 0; i--) {
+                    const overlay = overlayImages[i];
+                    //確定滑鼠在該圖檔上點擊
+                    if (
+                        mouseX >= overlay.x + deleteIconSize/2 &&
+                        mouseX <= overlay.x + overlay.image.width - scaleHandleRadius &&
+                        mouseY >= overlay.y  &&
+                        mouseY <= overlay.y + overlay.image.height
+                    ) {
+                        isDragging = true;
+                        selectedOverlayIndex = overlayImages.length - 1;
+                        // 將被點擊的圖層移至陣列的最頂部
+                        overlayImages.push(overlayImages.splice(i, 1)[0]);                    
+                        isClick = true;//縮放功能 - 邊框
+                        break;
+                    }
 
-                //縮放功能
-                const scaledWidth = overlay.image.width;
-                const scaledHeight = overlay.image.height;
-                const scaleHandleX = overlay.x + scaledWidth;
-                const scaleHandleY = overlay.y + scaledHeight;
-                if (
-                    mouseX >= scaleHandleX - scaleHandleRadius &&
-                    mouseX <= scaleHandleX + scaleHandleRadius &&
-                    mouseY >= scaleHandleY - scaleHandleRadius &&
-                    mouseY <= scaleHandleY + scaleHandleRadius
-                ) {
-                    resizing = true;
-                    selectedOverlayIndex = i;
-                    initialWidth = overlay.image.width;
-                    initialHeight = overlay.image.height;
-                    break;
-                }
-                //刪除功能
-                const deleteIconX = overlay.x;
-                const deleteIconY = overlay.y;
-                if (
-                    mouseX >= deleteIconX - deleteIconSize/2  &&
-                    mouseX <= deleteIconX + deleteIconSize/2  &&
-                    mouseY >= deleteIconY - deleteIconSize/2  &&
-                    mouseY <= deleteIconY + deleteIconSize/2 
-                ) {
+                    //縮放功能
+                    const scaledWidth = overlay.image.width;
+                    const scaledHeight = overlay.image.height;
+                    const scaleHandleX = overlay.x + scaledWidth;
+                    const scaleHandleY = overlay.y + scaledHeight;
+                    if (
+                        mouseX >= scaleHandleX - scaleHandleRadius &&
+                        mouseX <= scaleHandleX + scaleHandleRadius &&
+                        mouseY >= scaleHandleY - scaleHandleRadius &&
+                        mouseY <= scaleHandleY + scaleHandleRadius
+                    ) {
+                        resizing = true;
+                        selectedOverlayIndex = i;
+                        initialWidth = overlay.image.width;
+                        initialHeight = overlay.image.height;
+                        break;
+                    }
+                    //刪除功能
+                    const deleteIconX = overlay.x;
+                    const deleteIconY = overlay.y;
+                    if (
+                        mouseX >= deleteIconX - deleteIconSize/2  &&
+                        mouseX <= deleteIconX + deleteIconSize/2  &&
+                        mouseY >= deleteIconY - deleteIconSize/2  &&
+                        mouseY <= deleteIconY + deleteIconSize/2 
+                    ) {
                     // 在點擊到刪除圖案時，執行刪除該圖層的操作
                     overlayImages.splice(i, 1);
                     redrawCanvas();
                     break;
-                }
-            }       
-        }     
+                    }
+                }       
+            }     
             redrawCanvas();
             
             //點擊後繪製 邊框、縮放按鈕、刪除按鈕
-            if (isClick && selectedOverlayIndex !== -1){
+            if (isClick && selectedOverlayIndex !== -1){                 
                 const overlay = overlayImages[selectedOverlayIndex];
+                ctx.strokeStyle = 'black';
                 ctx.strokeRect(overlay.x, overlay.y, overlay.image.width, overlay.image.height);
                 const scaledWidth = overlay.image.width;
                 const scaledHeight = overlay.image.height;
@@ -130,39 +130,53 @@
             }                        
         }
         
-        function handleMouseUp(e) {
+        function handleMouseUp(e) {            
             isDragging = false;
-            resizing = false;
+            const mouseX = e.clientX - canvas.getBoundingClientRect().left;
+            const mouseY = e.clientY - canvas.getBoundingClientRect().top; 
+            resizing = false;         
             selectedOverlayIndex = -1;
+            //畫矩形框
             if (isDrawingRectangle) {
                 isDrawingRectangle = false;
                 const mouseX = e.clientX - canvas.getBoundingClientRect().left;
                 const mouseY = e.clientY - canvas.getBoundingClientRect().top;
                 rectangleEndX = mouseX;
                 rectangleEndY = mouseY;
-
                 // Create a new overlay image from the drawn rectangle
                 const rectCanvas = document.createElement('canvas');
                 rectCanvas.width = Math.abs(rectangleEndX - rectangleStartX);
                 rectCanvas.height = Math.abs(rectangleEndY - rectangleStartY);
                 const rectCtx = rectCanvas.getContext('2d');
-                drawRectangle(rectCtx,rectangleStartX, rectangleStartY, rectangleEndX, rectangleEndY);                
-                //overlayImages.push({number:j, image: rectCanvas, x: rectangleStartX, y: rectangleStartY, width:rectCanvas.width, height:rectCanvas.height , });j++;
-                isRectangle = false;
-                //redrawCanvas(); 
+                drawRectangle(rectCtx,0, 0, rectCanvas.width, rectCanvas.height);                
+                overlayImages.push({
+                    number:j, 
+                    image: rectCanvas, 
+                    x: rectangleStartX, 
+                    y: rectangleStartY, 
+                    width:rectCanvas.width, 
+                    height:rectCanvas.height,
+                 });
+                j++;
+                console.log(overlayImages);
+                isRectangle = false;              
+                redrawCanvas(); 
             }
         }
         
-        function handleMouseMove(e) {            
+        function handleMouseMove(e) {                
             //移動功能
             if (isDragging && selectedOverlayIndex !== -1) {
                 const overlay = overlayImages[selectedOverlayIndex];
                 overlay.x = e.clientX - canvas.getBoundingClientRect().left - overlay.image.width / 2;
                 overlay.y = e.clientY - canvas.getBoundingClientRect().top - overlay.image.height / 2;
+                console.log(overlay.image);
                 redrawCanvas();console.log("拖動圖層");
             }else if (isDrawingRectangle) {//畫矩形框
+                const mouseX = e.clientX - canvas.getBoundingClientRect().left;
+                const mouseY = e.clientY - canvas.getBoundingClientRect().top;                     
                 redrawCanvas();
-                drawRectangle(rectangleStartX, rectangleStartY, mouseX, mouseY);
+                drawRectangle(ctx,rectangleStartX, rectangleStartY, mouseX, mouseY);            
             }
             //縮放功能 
             if (resizing && selectedOverlayIndex !== -1) {
@@ -173,10 +187,34 @@
                 const deltaY = mouseY - (overlay.y + overlay.image.height);
                 const newWidth = initialWidth + deltaX;
                 const newHeight = initialHeight + deltaY;
-                overlay.image.width = newWidth;
-                overlay.image.height = newHeight;
-                redrawCanvas();console.log("縮放圖層");
-            }
+
+                //旋轉功能
+                // 計算用戶拖動的角度
+                rotationAngle = Math.atan2(deltaX, deltaY);                
+
+                //因為一直無法解決[不可動到retcanvas長寬]的問題，所以用爆理解法刪除圖層重新推一個新的長寬上去
+                if(overlay.image instanceof HTMLCanvasElement && resizing){
+                    overlayImages.splice(selectedOverlayIndex, 1);
+                    const rectCanvas = document.createElement('canvas');
+                    rectCanvas.width = newWidth;
+                    rectCanvas.height = newHeight;
+                    const rectCtx = rectCanvas.getContext('2d');
+                    drawRectangle(rectCtx,0, 0, rectCanvas.width, rectCanvas.height);                
+                    overlayImages.push({
+                        number:j, 
+                        image: rectCanvas, 
+                        x: overlay.x, 
+                        y: overlay.y, 
+                        width:rectCanvas.width, 
+                        height:rectCanvas.height,
+                 });
+                j++;
+                }else{
+                    overlay.image.width = newWidth;
+                    overlay.image.height = newHeight;
+                }                            
+                redrawCanvas();
+            }            
             //文字圖標
             /*if (isDrawing && isText) {
                     userX = e.clientX ;
@@ -190,12 +228,6 @@
             if(isText && isImageLoaded){
                     userX = e.clientX - canvas.getBoundingClientRect().left;
                     userY = e.clientY - canvas.getBoundingClientRect().top;
-                    
-                    window.addEventListener("keyup", e => {
-                        if (e.key === "Backspace") {
-                            delText();
-                        } else handleDrawText(e.key);
-                        });
                     }        
         }
         function handleMouseEnter(e){
@@ -211,7 +243,15 @@
             }            
         }       */
         /*-----------------------------------------------------Function-----------------------------------------------------*/
-        function redrawCanvas() {
+        //繪製圖像於畫布上
+        function drawImageOnCanvas(image, x, y, width, height) {
+            ctx.drawImage(image, x, y, width, height);
+        }
+        //清空畫布
+        function clearCanvas() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+        }
+        function redrawCanvas(newWidth,newHeight) {
             clearCanvas();
             // 計算等比例缩放比例
             const scale = Math.min(canvas.width / backgroundImage.width, canvas.height / backgroundImage.height);
@@ -220,12 +260,20 @@
             if(backgroundImage.height < canvas.height){
                 scaledHeight = backgroundImage.height;
             }      
-            drawImageOnCanvas(backgroundImage, 0, 0, scaledWidth, scaledHeight);
-            for (const overlay of overlayImages) {
-                const scaledWidth = overlay.image.width;
-                const scaledHeight = overlay.image.height;
-                drawImageOnCanvas(overlay.image, overlay.x, overlay.y, scaledWidth, scaledHeight);
-                
+            drawImageOnCanvas(backgroundImage, 0, 0, scaledWidth, scaledHeight);           
+            for (const overlay of overlayImages) {                                 
+                const overlayWidth = overlay.image.width;
+                const overlayHeight = overlay.image.height;            
+                // 將圖層的中心點設置為旋轉的軸心
+                //const context = overlay.image.getContext('2d');
+                //context.translate(overlay.x + overlay.width / 2, overlay.y + overlay.height / 2);
+                ctx.rotate((Math.PI / 180) * 45);
+                ctx.drawImage(image, -image.width / 2, -image.height / 2, image.width, image.height);
+                // 恢復坐標系統
+                ctx.rotate((Math.PI / 180) * -45);
+                ctx.translate(-centerX, -centerY);
+                overlay.image.rotate(rotationAngle);
+                drawImageOnCanvas(overlay.image, overlay.x, overlay.y, overlayWidth, overlayHeight);  
             }
         }
         function zoomInImage(){
@@ -248,9 +296,35 @@
          function EditText (e) {   
             isText = true; console.log(isText);            
         };
+        function TextListener(){
+            window.addEventListener("keyup", e => {
+            if (e.key === "Backspace") {
+                delText();
+            } else handleDrawText(e.key);
+        });
+        }
+        function handleDrawText(text) {
+            const tempStr = inputs[inputs.length - 1] + text;
+            const tempWidth = ctx.measureText(tempStr).width;
+            inputs[inputs.length - 1] += text;
+            render();
+        }
+        
+        function drawText(text, x, y){
+            ctx.beginPath();
+            ctx.font = `${fontSize}px 微软雅黑`;
+            ctx.fillStyle = "black";
+            ctx.textBaseline = "top";
+            ctx.fillText(text, x, y);
+            ctx.closePath();
+        };
+        function delText() {
+            inputs[inputs.length - 1] = inputs[inputs.length - 1].substr(0, inputs[inputs.length - 1].length - 1)
+            render();
+        }                   
         //畫矩形框        
         function IsdrawRectangle(){
-            isDrawingRectangle = true;
+            isRectangle = true;
         }
         function drawRectangle(canvas,startX, startY, endX, endY) {
             canvas.beginPath();
@@ -262,7 +336,6 @@
         }
         function saveImage() {
             var dataURL = canvas.toDataURL('image/png');
-
             var link = document.createElement('a');
             link.href = dataURL;
             link.download = 'canvas_image.png';
@@ -270,11 +343,68 @@
             link.click();
         }
         /*---------------------------------------------------------------------------------------------------------------------*/        
+        class InterPoint {
+            timer;
+            prevInterPoint = [0, 0];
+            lineColor = '#000';
+            constructor(ctx, lineWidth, lineHength, delay) {
+                this.ctx = ctx;
+                this.lineHength = lineHength;
+                this.lineWidth = lineWidth;
+                this.delay = delay;
+                this.drawInsetPoint(true);
+            }
+            setLineColor(lineColor) {
+                this.lineColor = lineColor;
+            }
+            drawVerticalLine = (x, y, height) => {
+                this.ctx.beginPath();
+                this.ctx.lineWidth = this.lineWidth;
+                this.ctx.moveTo(x, y);
+                this.ctx.lineTo(x, y + height);
+                this.ctx.strokeStyle = this.lineColor;
+                this.ctx.stroke();
+                this.ctx.closePath();
+            }
+            updateInterPoint() {
+                const x = this.ctx.measureText(inputs[inputs.length - 1]).width + 4;
+                const y = (inputs.length - 1) * this.lineHength + height / 2;
+                this.prevInterPoint = [x, y]
+            }
+            clear() {
+                this.ctx.clearRect(this.prevInterPoint[0] - this.lineWidth / 2 - 1, this.prevInterPoint[1], this.prevInterPoint[0] + this.lineWidth, this.prevInterPoint[1] + this.lineHength);
+            }
+            drawInsetPoint(state) {
+                if (state) {
+                    this.updateInterPoint();
+                    this.drawVerticalLine(...this.prevInterPoint, this.lineHength);
+                } else {
+                    this.clear();
+                }
+                this.timer = setTimeout(() => {
+                    this.drawInsetPoint(!state);
+                }, this.delay);
+            }
+            immediatelyUpdate() {
+                clearTimeout(this.timer);
+                this.drawInsetPoint(true);
+            }
+        }
+        const interPoint = new InterPoint(ctx, 2, fontSize, 500);//(ctx, lineWidth, lineHength, delay)
+        function render() {
+            //清空画布
+            ctx.clearRect(0, 0, width, height);
+            //绘制文字
+            inputs.forEach((input, index) => {
+                drawText(input, 0, index * fontSize + ctx.height / 2);
+            });
+            interPoint.immediatelyUpdate();
+        }        
         /*------------------------------------------------------功能圖示按鈕繪畫---------------------------------------------------------------------------*/        
         function drawScaleHandle(x, y) {
             ctx.beginPath();
             ctx.arc(x, y, scaleHandleRadius, 0, Math.PI * 2);//arc(x, y, radius, startAngle, endAngle, anticlockwise) 
-            ctx.fillStyle = 'white';
+            //ctx.fillStyle = 'white';
             ctx.fill();
             drawImageOnCanvas(zoomIcon, x-(scaleHandleRadius/2), y-(scaleHandleRadius/2), scaleHandleRadius, scaleHandleRadius);
             ctx.closePath();
@@ -283,7 +413,7 @@
         function drawDeleteIcon(x, y) {
             ctx.beginPath();
             ctx.arc(x, y, deleteIconSize/2, 0, Math.PI * 2);
-            ctx.fillStyle = 'white';
+            //ctx.fillStyle = 'white';
             ctx.fill();
             drawImageOnCanvas(deletIcon, x-(deleteIconSize/2), y-(deleteIconSize/2), deleteIconSize, deleteIconSize);
             ctx.closePath();
@@ -296,7 +426,7 @@
                 redrawCanvas();
             }
         }
-         /*--------------------------------------------------------------------------------------------------------------------------------------------------*/
+        /*--------------------------------------------------------------------------------------------------------------------------------------------------*/
         backgroundImage.onload = function () {            
             clearCanvas();          
             //drawImageOnCanvas(backgroundImage, 0, 0, scaledWidth, scaledHeight);console.log(scaledHeight);
@@ -331,7 +461,7 @@
         document.getElementById('zoomIn').addEventListener('click', zoomInImage);
         document.getElementById('zoomOut').addEventListener('click', zoomOutImage);
         //文字編輯功能
-        document.getElementById('drawTextButton').addEventListener('change',EditText);
+        document.getElementById('drawTextButton').addEventListener('click',EditText);
         //畫矩形框
         document.getElementById('drawRectangle').addEventListener('click',IsdrawRectangle);
 
@@ -422,7 +552,7 @@ menuItems.forEach((item, index) => {
                 <div style="padding: 25px; ">
                     <div >
                         <button class="button" type="button" style="background-color: white; border:1px solid #fbbb3c;border-radius: 50px;text-align: center;margin:0px 20px ;">SAVE</button>
-                        <button class="button"onclick="saveImage()" type="button" style="background-color:#fbbb3c;border: none; border-radius: 50px;color: white;text-align: center;">完成輸出</button>
+                        <button class="button"onclick="saveImage()" type="button" style="background-color:#fbbb3c;border: none; border-radius: 50px;color: black;text-align: center;">完成輸出</button>
                     </div>          
                 </div>
                 
@@ -481,11 +611,16 @@ menuItems.forEach((item, index) => {
                         <div class="menu__border"></div>                        
                     </div>
                 </div>
+                <div style="display: flex; align-items: center;">
+                    <button type="button"style="background-color:#fbbb3c;border: none; border-radius: 5px;color: black;text-align: center;align-items: center;">
+                        <label><svg xmlns="http://www.w3.org/2000/svg" width="25" height="25" fill="currentColor" class="bi bi-plus-square-dotted" viewBox="0 0 16 16">
+                            <path d="M2.5 0c-.166 0-.33.016-.487.048l.194.98A1.51 1.51 0 0 1 2.5 1h.458V0H2.5zm2.292 0h-.917v1h.917V0zm1.833 0h-.917v1h.917V0zm1.833 0h-.916v1h.916V0zm1.834 0h-.917v1h.917V0zm1.833 0h-.917v1h.917V0zM13.5 0h-.458v1h.458c.1 0 .199.01.293.029l.194-.981A2.51 2.51 0 0 0 13.5 0zm2.079 1.11a2.511 2.511 0 0 0-.69-.689l-.556.831c.164.11.305.251.415.415l.83-.556zM1.11.421a2.511 2.511 0 0 0-.689.69l.831.556c.11-.164.251-.305.415-.415L1.11.422zM16 2.5c0-.166-.016-.33-.048-.487l-.98.194c.018.094.028.192.028.293v.458h1V2.5zM.048 2.013A2.51 2.51 0 0 0 0 2.5v.458h1V2.5c0-.1.01-.199.029-.293l-.981-.194zM0 3.875v.917h1v-.917H0zm16 .917v-.917h-1v.917h1zM0 5.708v.917h1v-.917H0zm16 .917v-.917h-1v.917h1zM0 7.542v.916h1v-.916H0zm15 .916h1v-.916h-1v.916zM0 9.375v.917h1v-.917H0zm16 .917v-.917h-1v.917h1zm-16 .916v.917h1v-.917H0zm16 .917v-.917h-1v.917h1zm-16 .917v.458c0 .166.016.33.048.487l.98-.194A1.51 1.51 0 0 1 1 13.5v-.458H0zm16 .458v-.458h-1v.458c0 .1-.01.199-.029.293l.981.194c.032-.158.048-.32.048-.487zM.421 14.89c.183.272.417.506.69.689l.556-.831a1.51 1.51 0 0 1-.415-.415l-.83.556zm14.469.689c.272-.183.506-.417.689-.69l-.831-.556c-.11.164-.251.305-.415.415l.556.83zm-12.877.373c.158.032.32.048.487.048h.458v-1H2.5c-.1 0-.199-.01-.293-.029l-.194.981zM13.5 16c.166 0 .33-.016.487-.048l-.194-.98A1.51 1.51 0 0 1 13.5 15h-.458v1h.458zm-9.625 0h.917v-1h-.917v1zm1.833 0h.917v-1h-.917v1zm1.834-1v1h.916v-1h-.916zm1.833 1h.917v-1h-.917v1zm1.833 0h.917v-1h-.917v1zM8.5 4.5a.5.5 0 0 0-1 0v3h-3a.5.5 0 0 0 0 1h3v3a.5.5 0 0 0 1 0v-3h3a.5.5 0 0 0 0-1h-3v-3z"/>
+                          </svg>上傳底圖<input type="file" id="backgroundImage" accept="image/*"style="width:1px;height:1px;"></label>
+                    </button>                    
+                </div>
             </div>           
             <div style="text-align: center;">
-                <label><svg xmlns="http://www.w3.org/2000/svg" width="50" height="50" fill="currentColor" class="bi bi-plus-square-dotted" viewBox="0 0 16 16">
-                <path d="M2.5 0c-.166 0-.33.016-.487.048l.194.98A1.51 1.51 0 0 1 2.5 1h.458V0H2.5zm2.292 0h-.917v1h.917V0zm1.833 0h-.917v1h.917V0zm1.833 0h-.916v1h.916V0zm1.834 0h-.917v1h.917V0zm1.833 0h-.917v1h.917V0zM13.5 0h-.458v1h.458c.1 0 .199.01.293.029l.194-.981A2.51 2.51 0 0 0 13.5 0zm2.079 1.11a2.511 2.511 0 0 0-.69-.689l-.556.831c.164.11.305.251.415.415l.83-.556zM1.11.421a2.511 2.511 0 0 0-.689.69l.831.556c.11-.164.251-.305.415-.415L1.11.422zM16 2.5c0-.166-.016-.33-.048-.487l-.98.194c.018.094.028.192.028.293v.458h1V2.5zM.048 2.013A2.51 2.51 0 0 0 0 2.5v.458h1V2.5c0-.1.01-.199.029-.293l-.981-.194zM0 3.875v.917h1v-.917H0zm16 .917v-.917h-1v.917h1zM0 5.708v.917h1v-.917H0zm16 .917v-.917h-1v.917h1zM0 7.542v.916h1v-.916H0zm15 .916h1v-.916h-1v.916zM0 9.375v.917h1v-.917H0zm16 .917v-.917h-1v.917h1zm-16 .916v.917h1v-.917H0zm16 .917v-.917h-1v.917h1zm-16 .917v.458c0 .166.016.33.048.487l.98-.194A1.51 1.51 0 0 1 1 13.5v-.458H0zm16 .458v-.458h-1v.458c0 .1-.01.199-.029.293l.981.194c.032-.158.048-.32.048-.487zM.421 14.89c.183.272.417.506.69.689l.556-.831a1.51 1.51 0 0 1-.415-.415l-.83.556zm14.469.689c.272-.183.506-.417.689-.69l-.831-.556c-.11.164-.251.305-.415.415l.556.83zm-12.877.373c.158.032.32.048.487.048h.458v-1H2.5c-.1 0-.199-.01-.293-.029l-.194.981zM13.5 16c.166 0 .33-.016.487-.048l-.194-.98A1.51 1.51 0 0 1 13.5 15h-.458v1h.458zm-9.625 0h.917v-1h-.917v1zm1.833 0h.917v-1h-.917v1zm1.834-1v1h.916v-1h-.916zm1.833 1h.917v-1h-.917v1zm1.833 0h.917v-1h-.917v1zM8.5 4.5a.5.5 0 0 0-1 0v3h-3a.5.5 0 0 0 0 1h3v3a.5.5 0 0 0 1 0v-3h3a.5.5 0 0 0 0-1h-3v-3z"/>
-              </svg><h3>上傳底圖</h3><input type="file" id="backgroundImage" accept="image/*"style="width:1px;height:1px;"></label>
+                
             <canvas id="myCanvas"  ></canvas>
             <div class="mouseImg"><!--插入游標圖案-->
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-cursor-text" viewBox="0 0 16 16">
