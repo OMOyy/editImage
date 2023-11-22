@@ -23,6 +23,7 @@
         let selectedOverlayIndex = -1;
         let resizing = false;
         let rotationAngle = 0;
+        let isImageLoaded = false;
 
         let initialWidth, initialHeight;
         let mouseX, mouseY;
@@ -34,23 +35,14 @@
         let rectangleStartX, rectangleStartY, rectangleEndX, rectangleEndY;
         //裁切
         let isCropping = false;
-        let cropStartX, cropStartY, cropWidth, cropHeight;
-        let isImageLoaded = false;
-
+        let isCrop = false;
+        let cropLeft, cropTop, cropDown, cropRight;        
+        let cropRect = { x: 100, y: 100, width: 200, height: 150 }; 
+        let cropX, cropY, cropWidth, cropHeight;   
 
         //文字編輯        
         let isText = false;
         let isDrawing = false;
-        let userX = 0; 
-        let userY = 0; 
-        var mouseImg = document.querySelector('.mouseImg');
-        const fontSize = 24;
-        const point = [0, backgroundImage.height / 2];
-        let inputs = [""];   
-        let width = 700;
-        let height = 500;    
-        
-        
 
         function handleMouseDown(e) {
              mouseX = e.clientX - canvas.getBoundingClientRect().left;
@@ -65,7 +57,23 @@
                 height = mouseY;
                 //const interPoint = new InterPoint(ctx, 3, fontSize, 500);//(ctx, lineWidth, lineHength, delay)
                 TextListener();
-            } else {
+            }else if(isCropping && isImageLoaded){   
+                drawcheck((backgroundImage.width+canvas.getBoundingClientRect().left)/2,canvas.getBoundingClientRect().top);   
+                //裁切功能 //let cropLeft, cropTop, cropDown, cropRight;  
+                if( mouseX == cropX && mouseY >= backgroundImage.y && mouseY <= backgroundImage.y + backgroundImage.height ){
+                            cropLeft = true;
+                        }   
+                        if( mouseX == cropX + backgroundImage.width && mouseY >= backgroundImage.y && mouseY <= backgroundImage.y + backgroundImage.height ){
+                            cropRight = true;
+                        }
+                        if( mouseY == cropY && mouseX >= backgroundImage.x && mouseX <= backgroundImage.x + backgroundImage.width ){
+                            cropTop = true;
+                        }
+                        if( mouseY == cropY + backgroundImage.height && mouseX >= backgroundImage.x && mouseX <= backgroundImage.x + backgroundImage.width ){
+                            cropDown = true;
+                        }              
+                                                         
+            }else {
                 for (let i = overlayImages.length - 1; i >= 0; i--) {
                     const overlay = overlayImages[i];
                     //確定滑鼠在該圖檔上點擊
@@ -82,7 +90,6 @@
                         isClick = true;//縮放功能 - 邊框
                         break;
                     }
-
                     //縮放功能
                     const scaledWidth = overlay.image.width;
                     const scaledHeight = overlay.image.height;
@@ -136,6 +143,10 @@
             const mouseY = e.clientY - canvas.getBoundingClientRect().top; 
             resizing = false;         
             selectedOverlayIndex = -1;
+            cropLeft = false;
+            cropRight = false;
+            cropTop = false;
+            cropDown = false;
             //畫矩形框
             if (isDrawingRectangle) {
                 isDrawingRectangle = false;
@@ -177,6 +188,27 @@
                 const mouseY = e.clientY - canvas.getBoundingClientRect().top;                     
                 redrawCanvas();
                 drawRectangle(ctx,rectangleStartX, rectangleStartY, mouseX, mouseY);            
+            }else if(isCrop && isImageLoaded){//裁切功能
+                mouseX = e.clientX - canvas.getBoundingClientRect().left;
+                mouseY = e.clientY - canvas.getBoundingClientRect().top;
+                const deltaX = mouseX - (backgroundImage.x + backgroundImage.width);
+                const deltaY = mouseY - (backgroundImage.y + backgroundImage.height); 
+                const deltaX2 = mouseX - backgroundImage.x ;
+                const deltaY2 = mouseY - backgroundImage.y ; 
+                cropLeft = backgroundImage.x;
+                cropRight = backgroundImage.x + backgroundImage.width;
+                cropTop = backgroundImage.y;
+                cropDown = backgroundImage.y + backgroundImage.height;
+                if(cropLeft){
+                    cropX = cropX + deltaX2;
+                }else if(cropRight){
+                    cropWidth = cropWidth + deltaX;                    
+                }else if(cropTop){
+                    cropY = cropY + deltaY2;
+                }else if(cropDown){
+                    cropHeight = cropHeight + deltaY;
+                }
+                drawCropRect(cropX, cropY, cropWidth, cropHeight);
             }
             //縮放功能 
             if (resizing && selectedOverlayIndex !== -1) {
@@ -190,7 +222,7 @@
 
                 //旋轉功能
                 // 計算用戶拖動的角度
-                rotationAngle = Math.atan2(deltaX, deltaY);                
+                //rotationAngle = Math.atan2(mouseX, mouseY);  //要以哪裡為中心點?
 
                 //因為一直無法解決[不可動到retcanvas長寬]的問題，所以用爆理解法刪除圖層重新推一個新的長寬上去
                 if(overlay.image instanceof HTMLCanvasElement && resizing){
@@ -215,33 +247,8 @@
                 }                            
                 redrawCanvas();
             }            
-            //文字圖標
-            /*if (isDrawing && isText) {
-                    userX = e.clientX ;
-                    userY = e.clientY ;
-                    mouseImg.style.left = userX + 'px';
-                    mouseImg.style.top = userY + 'px';
-                }   */                    
-        }
-        /*function handleMouseClick(e){
-            console.log("owo");console.log(isText);
-            if(isText && isImageLoaded){
-                    userX = e.clientX - canvas.getBoundingClientRect().left;
-                    userY = e.clientY - canvas.getBoundingClientRect().top;
-                    }        
-        }
-        function handleMouseEnter(e){
-            if(isText){
-                isDrawing = true;
-                canvas.style.cursor = 'none';
-            }            
-        }
-        function handleMouseLeave(e){
-            if(isText){
-                isDrawing = false;
-                canvas.style.cursor = 'auto';
-            }            
-        }       */
+            
+        }        
         /*-----------------------------------------------------Function-----------------------------------------------------*/
         //繪製圖像於畫布上
         function drawImageOnCanvas(image, x, y, width, height) {
@@ -251,7 +258,7 @@
         function clearCanvas() {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
         }
-        function redrawCanvas(newWidth,newHeight) {
+        function redrawCanvas() {
             clearCanvas();
             // 計算等比例缩放比例
             const scale = Math.min(canvas.width / backgroundImage.width, canvas.height / backgroundImage.height);
@@ -261,20 +268,70 @@
                 scaledHeight = backgroundImage.height;
             }      
             drawImageOnCanvas(backgroundImage, 0, 0, scaledWidth, scaledHeight);           
-            for (const overlay of overlayImages) {                                 
+            for (const overlay of overlayImages) {    
+                //drawRotate(overlay);                              
                 const overlayWidth = overlay.image.width;
-                const overlayHeight = overlay.image.height;            
-                // 將圖層的中心點設置為旋轉的軸心
-                //const context = overlay.image.getContext('2d');
-                //context.translate(overlay.x + overlay.width / 2, overlay.y + overlay.height / 2);
-                ctx.rotate((Math.PI / 180) * 45);
-                ctx.drawImage(image, -image.width / 2, -image.height / 2, image.width, image.height);
-                // 恢復坐標系統
-                ctx.rotate((Math.PI / 180) * -45);
-                ctx.translate(-centerX, -centerY);
-                overlay.image.rotate(rotationAngle);
-                drawImageOnCanvas(overlay.image, overlay.x, overlay.y, overlayWidth, overlayHeight);  
+                const overlayHeight = overlay.image.height;        
+                drawImageOnCanvas(overlay.image, overlay.x, overlay.y, overlayWidth, overlayHeight);                 
             }
+        }
+        function drawRotate(overlay){                
+                // 將圖層的中心點設置為旋轉的軸心
+                // 設定旋轉中心為圖像的中心
+                const centerX = overlay.image.width / 2;
+                const centerY = overlay.image.height / 2;
+
+                ctx.translate(centerX, centerY);
+                ctx.rotate((Math.PI / 180) * rotationAngle);
+                ctx.clearRect(overlay.x,overlay.y,overlay.image.width, overlay.image.height);
+                // 計算旋轉後的圖像區域的邊界框
+                const rotatedBoundingBox = getRotatedBoundingBox(centerX, centerY, overlay.image.width, overlay.image.height, (Math.PI / 180) * 45);
+
+                // 計算新的寬度和高度
+                const rotatedWidth = rotatedBoundingBox.maxX - rotatedBoundingBox.minX;
+                const rotatedHeight = rotatedBoundingBox.maxY - rotatedBoundingBox.minY;     
+                overlay.image.width =  rotatedWidth;
+                overlay.image.height = rotatedHeight;
+                ctx.drawImage(overlay.image, 0, 0, overlay.image.width, overlay.image.height);
+                // 恢復坐標系統
+                ctx.rotate((Math.PI / 180) * -rotationAngle);
+                ctx.translate(-centerX, -centerY);  
+                
+        }
+        function getRotatedBoundingBox(centerX, centerY, width, height, angle) {
+            const radians = angle;
+            const cos = Math.abs(Math.cos(radians));
+            const sin = Math.abs(Math.sin(radians));
+
+            const newWidth = width * cos + height * sin;
+            const newHeight = width * sin + height * cos;
+
+            const minX = centerX - newWidth / 2;
+            const minY = centerY - newHeight / 2;
+            const maxX = centerX + newWidth / 2;
+            const maxY = centerY + newHeight / 2;
+
+            return { minX, minY, maxX, maxY };
+        }
+        function cropImage(){
+            isCropping = true;                 
+        }
+        // 繪製可調整的裁切框
+        function drawCropRect(cropX, cropY, cropWidth, cropHeight) {
+            // 繪製遮罩
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+            ctx.fillRect(0, 0, backgroundImage.width, backgroundImage.height);       
+            // 將 globalCompositeOperation 設置為 'destination-out'
+            ctx.globalCompositeOperation = 'destination-out';
+            ctx.strokeStyle = 'white';
+            ctx.lineWidth = 2;
+            ctx.strokeRect(cropX, cropY, cropWidth, cropHeight);
+            // 在裁切框的位置和尺寸上繪製一個白色的矩形
+            ctx.fillStyle = 'white';
+            ctx.fillRect(cropX, cropY, cropWidth, cropHeight);
+
+            // 還原 globalCompositeOperation 為預設值
+            ctx.globalCompositeOperation = 'source-over';
         }
         function zoomInImage(){
             if(isImageLoaded){
@@ -294,22 +351,8 @@
         }
          //編輯文字
          function EditText (e) {   
-            isText = true; console.log(isText);            
-        };
-        function TextListener(){
-            window.addEventListener("keyup", e => {
-            if (e.key === "Backspace") {
-                delText();
-            } else handleDrawText(e.key);
-        });
-        }
-        function handleDrawText(text) {
-            const tempStr = inputs[inputs.length - 1] + text;
-            const tempWidth = ctx.measureText(tempStr).width;
-            inputs[inputs.length - 1] += text;
-            render();
-        }
-        
+            isText = true;    
+        };        
         function drawText(text, x, y){
             ctx.beginPath();
             ctx.font = `${fontSize}px 微软雅黑`;
@@ -317,11 +360,7 @@
             ctx.textBaseline = "top";
             ctx.fillText(text, x, y);
             ctx.closePath();
-        };
-        function delText() {
-            inputs[inputs.length - 1] = inputs[inputs.length - 1].substr(0, inputs[inputs.length - 1].length - 1)
-            render();
-        }                   
+        };                 
         //畫矩形框        
         function IsdrawRectangle(){
             isRectangle = true;
@@ -342,64 +381,7 @@
             //開始下載
             link.click();
         }
-        /*---------------------------------------------------------------------------------------------------------------------*/        
-        class InterPoint {
-            timer;
-            prevInterPoint = [0, 0];
-            lineColor = '#000';
-            constructor(ctx, lineWidth, lineHength, delay) {
-                this.ctx = ctx;
-                this.lineHength = lineHength;
-                this.lineWidth = lineWidth;
-                this.delay = delay;
-                this.drawInsetPoint(true);
-            }
-            setLineColor(lineColor) {
-                this.lineColor = lineColor;
-            }
-            drawVerticalLine = (x, y, height) => {
-                this.ctx.beginPath();
-                this.ctx.lineWidth = this.lineWidth;
-                this.ctx.moveTo(x, y);
-                this.ctx.lineTo(x, y + height);
-                this.ctx.strokeStyle = this.lineColor;
-                this.ctx.stroke();
-                this.ctx.closePath();
-            }
-            updateInterPoint() {
-                const x = this.ctx.measureText(inputs[inputs.length - 1]).width + 4;
-                const y = (inputs.length - 1) * this.lineHength + height / 2;
-                this.prevInterPoint = [x, y]
-            }
-            clear() {
-                this.ctx.clearRect(this.prevInterPoint[0] - this.lineWidth / 2 - 1, this.prevInterPoint[1], this.prevInterPoint[0] + this.lineWidth, this.prevInterPoint[1] + this.lineHength);
-            }
-            drawInsetPoint(state) {
-                if (state) {
-                    this.updateInterPoint();
-                    this.drawVerticalLine(...this.prevInterPoint, this.lineHength);
-                } else {
-                    this.clear();
-                }
-                this.timer = setTimeout(() => {
-                    this.drawInsetPoint(!state);
-                }, this.delay);
-            }
-            immediatelyUpdate() {
-                clearTimeout(this.timer);
-                this.drawInsetPoint(true);
-            }
-        }
-        const interPoint = new InterPoint(ctx, 2, fontSize, 500);//(ctx, lineWidth, lineHength, delay)
-        function render() {
-            //清空画布
-            ctx.clearRect(0, 0, width, height);
-            //绘制文字
-            inputs.forEach((input, index) => {
-                drawText(input, 0, index * fontSize + ctx.height / 2);
-            });
-            interPoint.immediatelyUpdate();
-        }        
+        /*---------------------------------------------------------------------------------------------------------------------*/                
         /*------------------------------------------------------功能圖示按鈕繪畫---------------------------------------------------------------------------*/        
         function drawScaleHandle(x, y) {
             ctx.beginPath();
@@ -425,6 +407,34 @@
                 selectedOverlayIndex = -1;
                 redrawCanvas();
             }
+        }
+        function drawcheck(x,y){
+            // 裁切框的位置和尺寸
+            const clipWidth = 200;
+            const clipHeight = 150;
+
+            // 繪製矩形框
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
+            ctx.fillRect(x, y, clipWidth, clipHeight);
+
+            // 繪製打勾符號
+            ctx.beginPath();
+            ctx.moveTo(clipX + clipWidth * 0.25, clipY + clipHeight * 0.5);
+            ctx.lineTo(clipX + clipWidth * 0.45, clipY + clipHeight * 0.7);
+            ctx.lineTo(clipX + clipWidth * 0.7, clipY + clipHeight * 0.4);
+            ctx.strokeStyle = 'green';
+            ctx.lineWidth = 5;
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+            ctx.stroke();
+
+            // 繪製 "確定裁切" 文字
+            const buttonText = '確定裁切';
+            const textX = clipX + clipWidth / 2 - ctx.measureText(buttonText).width / 2;
+            const textY = clipY + clipHeight + 30;
+            ctx.fillStyle = 'white';
+            ctx.font = '20px Arial';
+            ctx.fillText(buttonText, textX, textY);
         }
         /*--------------------------------------------------------------------------------------------------------------------------------------------------*/
         backgroundImage.onload = function () {            
@@ -457,11 +467,11 @@
                 };
         }});
         //裁切功能
-        //document.getElementById('cropImage').addEventListener('click', cropImage);
+        document.getElementById('cropImage').addEventListener('click', cropImage);
         document.getElementById('zoomIn').addEventListener('click', zoomInImage);
         document.getElementById('zoomOut').addEventListener('click', zoomOutImage);
         //文字編輯功能
-        document.getElementById('drawTextButton').addEventListener('click',EditText);
+        //document.getElementById('drawTextButton').addEventListener('click',EditText);
         //畫矩形框
         document.getElementById('drawRectangle').addEventListener('click',IsdrawRectangle);
 
