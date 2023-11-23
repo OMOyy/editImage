@@ -43,20 +43,23 @@
         //文字編輯        
         let isText = false;
         let isDrawing = false;
+        let fontSize = 36;
 
         function handleMouseDown(e) {
              mouseX = e.clientX - canvas.getBoundingClientRect().left;
              mouseY = e.clientY - canvas.getBoundingClientRect().top;
             //畫矩形框
             if(isRectangle){
-                rectangleStartX = mouseX;
-                rectangleStartY = mouseY;
-                isDrawingRectangle = true;
-            }else if(isText){
-                width = mouseX;
-                height = mouseY;
-                //const interPoint = new InterPoint(ctx, 3, fontSize, 500);//(ctx, lineWidth, lineHength, delay)
-                TextListener();
+                if (
+                        mouseX >= canvas.getBoundingClientRect().left &&
+                        mouseX <= canvas.getBoundingClientRect().right  &&
+                        mouseY >= canvas.getBoundingClientRect().top  &&
+                        mouseY <= canvas.getBoundingClientRect().bottom
+                    ) {
+                        rectangleStartX = mouseX;
+                        rectangleStartY = mouseY;
+                        isDrawingRectangle = true;
+                    }
             }else if(isCropping && isImageLoaded){   
                 drawcheck((backgroundImage.width+canvas.getBoundingClientRect().left)/2,canvas.getBoundingClientRect().top);   
                 //裁切功能 //let cropLeft, cropTop, cropDown, cropRight;  
@@ -129,7 +132,7 @@
             if (isClick && selectedOverlayIndex !== -1){                 
                 const overlay = overlayImages[selectedOverlayIndex];
                 ctx.strokeStyle = 'black';
-                ctx.strokeRect(overlay.x, overlay.y, overlay.image.width, overlay.image.height);
+                ctx.strokeRect(overlay.x, overlay.y, overlay.image.width, overlay.image.height);console.log(overlay.image.width);
                 const scaledWidth = overlay.image.width;
                 const scaledHeight = overlay.image.height;
                 drawScaleHandle(overlay.x + scaledWidth, overlay.y + scaledHeight);
@@ -167,6 +170,7 @@
                     y: rectangleStartY, 
                     width:rectCanvas.width, 
                     height:rectCanvas.height,
+                    isRectCanvas: true,
                  });
                 j++;
                 console.log(overlayImages);
@@ -186,7 +190,7 @@
             }else if (isDrawingRectangle) {//畫矩形框
                 const mouseX = e.clientX - canvas.getBoundingClientRect().left;
                 const mouseY = e.clientY - canvas.getBoundingClientRect().top;                     
-                redrawCanvas();
+                redrawCanvas();console.log("矩形");
                 drawRectangle(ctx,rectangleStartX, rectangleStartY, mouseX, mouseY);            
             }else if(isCrop && isImageLoaded){//裁切功能
                 mouseX = e.clientX - canvas.getBoundingClientRect().left;
@@ -225,7 +229,7 @@
                 //rotationAngle = Math.atan2(mouseX, mouseY);  //要以哪裡為中心點?
 
                 //因為一直無法解決[不可動到retcanvas長寬]的問題，所以用爆理解法刪除圖層重新推一個新的長寬上去
-                if(overlay.image instanceof HTMLCanvasElement && resizing){
+                if(overlay.isRectCanvas && resizing){
                     overlayImages.splice(selectedOverlayIndex, 1);
                     const rectCanvas = document.createElement('canvas');
                     rectCanvas.width = newWidth;
@@ -239,15 +243,15 @@
                         y: overlay.y, 
                         width:rectCanvas.width, 
                         height:rectCanvas.height,
+                        isRectCanvas: true,
                  });
                 j++;
-                }else{
+               }else{
                     overlay.image.width = newWidth;
                     overlay.image.height = newHeight;
                 }                            
                 redrawCanvas();
-            }            
-            
+            }                       
         }        
         /*-----------------------------------------------------Function-----------------------------------------------------*/
         //繪製圖像於畫布上
@@ -351,19 +355,69 @@
         }
          //編輯文字
          function EditText (e) {   
-            isText = true;    
+            isText = true;   
+            isRectangle = false;
+            openModal(); 
         };        
-        function drawText(text, x, y){
-            ctx.beginPath();
-            ctx.font = `${fontSize}px 微软雅黑`;
-            ctx.fillStyle = "black";
-            ctx.textBaseline = "top";
-            ctx.fillText(text, x, y);
-            ctx.closePath();
-        };                 
+        function drawText(text, x, y){            
+            const textCanvas = document.createElement('canvas');//沒有設置長寬的話預設長寬是 150 300
+            const textCtx = textCanvas.getContext('2d');
+            textCtx.beginPath();
+            textCtx.font = `${fontSize}px 微软雅黑`;
+            textCtx.fillStyle = "black";
+            textCtx.textBaseline = "top";
+            textCtx.textAlign = "left";
+            textCtx.fillText(text, 1, 1);  
+            const textwidth = textCtx.measureText(text).width;
+            textCtx.closePath();
+            // 畫布大小似乎只能在一開始設置，所以再設一個畫布調整圖層長寬
+            const textCanvas2 = document.createElement('canvas');
+            textCanvas2.width = textwidth;//只能放在這個位置
+            textCanvas2.height = fontSize;
+            const textCtx2 = textCanvas2.getContext('2d');
+            textCtx2.beginPath();
+            textCtx2.font = `${fontSize}px 微软雅黑`;
+            textCtx2.fillStyle = "black";
+            textCtx2.textBaseline = "top";
+            textCtx2.textAlign = "left";
+            textCtx2.fillText(text, 1, 1);  
+            textCtx2.closePath();
+             // 将 textCanvas 转换为 Data URL
+            const dataURL = textCanvas2.toDataURL();
+            const textimage = new Image();
+            textimage.src = dataURL;
+            overlayImages.push({
+                    number:j, 
+                    image: textimage, 
+                    x: x, 
+                    y: y, 
+                    width:textCanvas2.width+1, 
+                    height:textCanvas2.height+1,
+                    isText:true,
+                    text:text,
+                 });
+                j++;         console.log(overlayImages);                  
+            redrawCanvas();
+            
+        };     
+        function openModal() {
+            document.getElementById('myModal').style.display = 'block';
+        }     
+        function addText() {
+            const textInput = document.getElementById('textInput');
+            const text = textInput.value.trim();
+            // 將文字繪製成圖層
+            drawText(text,50,50);
+            // 關閉模態對話框
+            isText = false;   
+            document.getElementById('myModal').style.display = 'none';
+            // 清空輸入框
+            textInput.value = '';
+        }       
         //畫矩形框        
         function IsdrawRectangle(){
             isRectangle = true;
+            isText = false;   
         }
         function drawRectangle(canvas,startX, startY, endX, endY) {
             canvas.beginPath();
@@ -386,7 +440,7 @@
         function drawScaleHandle(x, y) {
             ctx.beginPath();
             ctx.arc(x, y, scaleHandleRadius, 0, Math.PI * 2);//arc(x, y, radius, startAngle, endAngle, anticlockwise) 
-            //ctx.fillStyle = 'white';
+            ctx.fillStyle = 'white';
             ctx.fill();
             drawImageOnCanvas(zoomIcon, x-(scaleHandleRadius/2), y-(scaleHandleRadius/2), scaleHandleRadius, scaleHandleRadius);
             ctx.closePath();
@@ -395,7 +449,7 @@
         function drawDeleteIcon(x, y) {
             ctx.beginPath();
             ctx.arc(x, y, deleteIconSize/2, 0, Math.PI * 2);
-            //ctx.fillStyle = 'white';
+            ctx.fillStyle = 'white';
             ctx.fill();
             drawImageOnCanvas(deletIcon, x-(deleteIconSize/2), y-(deleteIconSize/2), deleteIconSize, deleteIconSize);
             ctx.closePath();
@@ -409,32 +463,7 @@
             }
         }
         function drawcheck(x,y){
-            // 裁切框的位置和尺寸
-            const clipWidth = 200;
-            const clipHeight = 150;
 
-            // 繪製矩形框
-            ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
-            ctx.fillRect(x, y, clipWidth, clipHeight);
-
-            // 繪製打勾符號
-            ctx.beginPath();
-            ctx.moveTo(clipX + clipWidth * 0.25, clipY + clipHeight * 0.5);
-            ctx.lineTo(clipX + clipWidth * 0.45, clipY + clipHeight * 0.7);
-            ctx.lineTo(clipX + clipWidth * 0.7, clipY + clipHeight * 0.4);
-            ctx.strokeStyle = 'green';
-            ctx.lineWidth = 5;
-            ctx.lineCap = 'round';
-            ctx.lineJoin = 'round';
-            ctx.stroke();
-
-            // 繪製 "確定裁切" 文字
-            const buttonText = '確定裁切';
-            const textX = clipX + clipWidth / 2 - ctx.measureText(buttonText).width / 2;
-            const textY = clipY + clipHeight + 30;
-            ctx.fillStyle = 'white';
-            ctx.font = '20px Arial';
-            ctx.fillText(buttonText, textX, textY);
         }
         /*--------------------------------------------------------------------------------------------------------------------------------------------------*/
         backgroundImage.onload = function () {            
@@ -471,7 +500,8 @@
         document.getElementById('zoomIn').addEventListener('click', zoomInImage);
         document.getElementById('zoomOut').addEventListener('click', zoomOutImage);
         //文字編輯功能
-        //document.getElementById('drawTextButton').addEventListener('click',EditText);
+        document.getElementById('drawTextButton').addEventListener('click',EditText);
+        document.getElementById('addText').addEventListener('click',addText);
         //畫矩形框
         document.getElementById('drawRectangle').addEventListener('click',IsdrawRectangle);
 
@@ -629,8 +659,19 @@ menuItems.forEach((item, index) => {
                     </button>                    
                 </div>
             </div>           
-            <div style="text-align: center;">
-                
+            <div style="margin: 15rem auto;max-width: 500px;"><!--待處理  這一塊會擋到畫布-->
+                <div  id="myModal"  style="position: fixed;top: 15rem ;display: none;z-index: 1060; text-align: center;   ">
+                    <div style="position: relative;display: flex;flex-direction: column;width: 100%;pointer-events: auto;background-color: #fff;
+                    background-clip: padding-box;
+                    border: 1px solid rgba(0,0,0,.2);
+                    border-radius: 0.3rem;padding: 0.3rem;
+                    outline: 0;">
+                        <div style="padding: 0.3rem;"><label for="textInput">請輸入文字：</label></div>
+                        <div><input type="text" id="textInput"></div>
+                        <div><button id="addText">確定</button></div>
+                    </div>
+                    
+                </div>
             <canvas id="myCanvas"  ></canvas>
             <div class="mouseImg"><!--插入游標圖案-->
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-cursor-text" viewBox="0 0 16 16">
