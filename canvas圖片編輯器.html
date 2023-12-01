@@ -8,8 +8,11 @@
         const imageInput = document.getElementById('backgroundImage');
         
         // 設定畫布尺寸
-        canvas.width = 1200;
-        canvas.height = 900;
+        canvas.width = canvas.clientWidth;
+        canvas.height = 500;//預設畫布
+        DrawNoImage();
+        // 提高讀取操作的效率
+        ctx.canvas.willReadFrequently = true;
 
         let backgroundImage = new Image();
         let overlayImages = [];
@@ -24,7 +27,8 @@
         let resizing = false;
         let rotationAngle = 0;
         let isImageLoaded = false;
-
+        addOverlayImage();
+        
         let initialWidth, initialHeight;
         let mouseX, mouseY;
         let scaleHandleRadius = 15;
@@ -45,11 +49,27 @@
         let isDrawing = false;
         let fontSize = 36;
 
+        //繪圖
+        let isdrawLine = false;
+        let drawLineX , drawLineY;
+        let isDrawingLine = false;
+
+        //歷史紀錄
+        let history = [];
+        let historyPointer = 0;
+
+        //顏色
+        let color ;
+
         function handleMouseDown(e) {
              mouseX = e.clientX - canvas.getBoundingClientRect().left;
              mouseY = e.clientY - canvas.getBoundingClientRect().top;
-            //畫矩形框
-            if(isRectangle){
+            //繪圖
+            if(isdrawLine){
+                drawLineX = mouseX;
+                drawLineY = mouseY;
+                isDrawingLine = true;
+            }else if(isRectangle){//畫矩形框
                 rectangleStartX = mouseX;
                 rectangleStartY = mouseY;
                 isDrawingRectangle = true;
@@ -72,7 +92,7 @@
                                                          
             }else {
                 for (let i = overlayImages.length - 1; i >= 0; i--) {
-                    const overlay = overlayImages[i];
+                    const overlay = overlayImages[i];console.log(overlayImages);      console.log(mouseX);      console.log(mouseY);    
                     //確定滑鼠在該圖檔上點擊
                     if (
                         mouseX >= overlay.x + deleteIconSize/2 &&
@@ -83,7 +103,7 @@
                         isDragging = true;
                         selectedOverlayIndex = overlayImages.length - 1;
                         // 將被點擊的圖層移至陣列的最頂部
-                        overlayImages.push(overlayImages.splice(i, 1)[0]); console.log("點擊");console.log(overlayImages);                   
+                        overlayImages.push(overlayImages.splice(i, 1)[0]);
                         isClick = true;//縮放功能 - 邊框
                         break;
                     }
@@ -117,13 +137,15 @@
                     break;
                     }
                 }       
-            }     
-            redrawCanvas();
+            } 
+            //if(isImageLoaded){    
+            //redrawCanvas();}
             
             //點擊後繪製 邊框、縮放按鈕、刪除按鈕
             if (isClick && selectedOverlayIndex !== -1){                 
                 const overlay = overlayImages[selectedOverlayIndex];
                 ctx.strokeStyle = 'black';
+                ctx.lineWidth = 2;
                 ctx.strokeRect(overlay.x, overlay.y, overlay.image.width, overlay.image.height);
                 const scaledWidth = overlay.image.width;
                 const scaledHeight = overlay.image.height;
@@ -143,7 +165,7 @@
             cropLeft = false;
             cropRight = false;
             cropTop = false;
-            cropDown = false;
+            cropDown = false;            
             //畫矩形框
             if (isDrawingRectangle) {
                 isDrawingRectangle = false;
@@ -167,9 +189,17 @@
                     isRectCanvas: true,
                  });
                 j++;
-                isRectangle = false;              
-                redrawCanvas(); 
-            }
+                isRectangle = false;ButtonActive();          
+                redrawCanvas();      
+            }else if(isDrawingLine){//繪圖功能
+                drawLine(ctx, drawLineX, drawLineY, mouseX, mouseY);
+                drawLineX = - canvas.getBoundingClientRect().left;
+                drawLineY = - canvas.getBoundingClientRect().top;
+                isDrawingLine = false;
+                isdrawLine = false; 
+                ButtonActive();               
+                saveState();
+            }            
         }
         
         function handleMouseMove(e) {                
@@ -180,8 +210,8 @@
                 overlay.y = e.clientY - canvas.getBoundingClientRect().top - overlay.image.height / 2;
                 redrawCanvas();
             }else if (isDrawingRectangle) {//畫矩形框
-                const mouseX = e.clientX - canvas.getBoundingClientRect().left;
-                const mouseY = e.clientY - canvas.getBoundingClientRect().top;                     
+                mouseX = e.clientX - canvas.getBoundingClientRect().left;
+                mouseY = e.clientY - canvas.getBoundingClientRect().top;                     
                 redrawCanvas();
                 drawRectangle(ctx,rectangleStartX, rectangleStartY, mouseX, mouseY);            
             }else if(isCrop && isImageLoaded){//裁切功能
@@ -205,6 +235,12 @@
                     cropHeight = cropHeight + deltaY;
                 }
                 drawCropRect(cropX, cropY, cropWidth, cropHeight);
+            }else if(isDrawingLine){//繪圖功能
+                mouseX = e.clientX - canvas.getBoundingClientRect().left ;
+                mouseY = e.clientY - canvas.getBoundingClientRect().top ;
+                drawLine(ctx, drawLineX, drawLineY, mouseX, mouseY);
+                drawLineX = mouseX;
+                drawLineY = mouseY;
             }
             //縮放功能 
             if (resizing && selectedOverlayIndex !== -1) {
@@ -253,7 +289,7 @@
                         const textCtx = textCanvas.getContext('2d');
                         textCtx.beginPath();
                         textCtx.font = `${newHeight}px 微软雅黑`;
-                        textCtx.fillStyle = "black";
+                        textCtx.fillStyle = `${color}`;
                         textCtx.textBaseline = "top";
                         textCtx.textAlign = "left";
                         textCtx.fillText(overlay.text, 1, 1);  
@@ -291,11 +327,11 @@
         function redrawCanvas() {
             clearCanvas();
             // 計算等比例缩放比例
-            const scale = Math.min(canvas.width / backgroundImage.width, canvas.height / backgroundImage.height);
+            const scale = canvas.width / backgroundImage.width;//Math.min(, canvas.height / backgroundImage.height)
             const scaledWidth = backgroundImage.width * scale;
             let scaledHeight = backgroundImage.height * scale;
-            if(backgroundImage.height < canvas.height){
-                scaledHeight = backgroundImage.height;
+            if(scaledHeight > canvas.height){
+                canvas.height = scaledHeight;
             }      
             drawImageOnCanvas(backgroundImage, 0, 0, scaledWidth, scaledHeight);           
             for (const overlay of overlayImages) {    
@@ -303,7 +339,8 @@
                 const overlayWidth = overlay.image.width;
                 const overlayHeight = overlay.image.height;        
                 drawImageOnCanvas(overlay.image, overlay.x, overlay.y, overlayWidth, overlayHeight);                 
-            }
+            }      
+            saveState(); 
         }
         function drawRotate(overlay){                
                 // 將圖層的中心點設置為旋轉的軸心
@@ -363,13 +400,15 @@
             // 還原 globalCompositeOperation 為預設值
             ctx.globalCompositeOperation = 'source-over';
         }
-        function zoomInImage(){
+        /*function zoomInImage(){
             if(isImageLoaded){
                 const scale =  100;
                 canvas.width = canvas.width + scale;
                 canvas.height = canvas.height + scale;
                 redrawCanvas();                
-            }            
+            }else{
+                openNoticeModal();
+            }                     
         }
         function zoomOutImage(){
             if(isImageLoaded){
@@ -377,20 +416,28 @@
                 canvas.width = canvas.width - scale;
                 canvas.height = canvas.height - scale;
                 redrawCanvas();
-            }            
-        }
+            }else{
+                openNoticeModal();
+            }                     
+        }*/
          //編輯文字
-         function EditText (e) {   
-            isText = true;   
-            isRectangle = false;
-            openModal(); 
+         function EditText (e) {  
+            if(isImageLoaded){
+                isText = true;   
+                isRectangle = false;
+                isdrawLine = false;                
+                ButtonActive();
+                openModal(); 
+            } else{
+                openNoticeModal();
+            }            
         };        
         function drawText(text, x, y){            
             const textCanvas = document.createElement('canvas');//沒有設置長寬的話預設長寬是 150 300
             const textCtx = textCanvas.getContext('2d');
             textCtx.beginPath();
             textCtx.font = `${fontSize}px 微软雅黑`;
-            textCtx.fillStyle = "black";
+            textCtx.fillStyle = `${color}`;
             textCtx.textBaseline = "top";
             textCtx.textAlign = "left";
             textCtx.fillText(text, 1, 1);  
@@ -403,7 +450,7 @@
             const textCtx2 = textCanvas2.getContext('2d');
             textCtx2.beginPath();
             textCtx2.font = `${fontSize}px 微软雅黑`;
-            textCtx2.fillStyle = "black";
+            textCtx2.fillStyle = `${color}`;
             textCtx2.textBaseline = "top";
             textCtx2.textAlign = "left";
             textCtx2.fillText(text, 1, 1);  
@@ -415,8 +462,8 @@
             overlayImages.push({
                     number:j, 
                     image: textCanvas2, 
-                    x: x, 
-                    y: y, 
+                    x: x - canvas.getBoundingClientRect().left, 
+                    y: y - canvas.getBoundingClientRect().top, 
                     width:textCanvas2.width+1, 
                     height:textCanvas2.height+1,
                     isText:true,
@@ -427,7 +474,7 @@
             
         };     
         function openModal() {
-            document.getElementById('myModal').style.display = 'block';
+            document.getElementById('TextModal').style.display = 'block';
         }     
         function addText() {
             const textInput = document.getElementById('textInput');
@@ -436,30 +483,159 @@
             drawText(text,canvas.width/2,canvas.height/2);
             // 關閉模態對話框
             isText = false;   
-            document.getElementById('myModal').style.display = 'none';
+            document.getElementById('TextModal').style.display = 'none';
+            //拿掉button active
+            ButtonActive();
             // 清空輸入框
             textInput.value = '';
         }       
         function cancelText(){
-            isText = false;   
-            document.getElementById('myModal').style.display = 'none';
+            isText = false;   ButtonActive();
+            document.getElementById('TextModal').style.display = 'none';
             textInput.value = '';
         }
         //畫矩形框        
         function IsdrawRectangle(){
-            isRectangle = true;
-            isText = false;   
+            if(isImageLoaded){
+                isRectangle = true;
+                isText = false;
+                isdrawLine = false;               
+                ButtonActive();
+            } else{
+                openNoticeModal();
+            }                     
         }
         function drawRectangle(canvas,startX, startY, endX, endY) {
             canvas.beginPath();
             canvas.rect(startX, startY, endX - startX, endY - startY);
-            canvas.strokeStyle = 'red';
+            canvas.strokeStyle = `${color}`;
             canvas.lineWidth = 2;
             canvas.stroke();
             canvas.closePath();
         }
+        //繪圖
+        function IsdrawLine(){
+            if(isImageLoaded){
+                ctx.strokeStyle = '#000';//預設畫筆顏色為黑色
+                isdrawLine = true;
+                isRectangle = false;
+                isText = false;   
+                ButtonActive();                
+            } else{
+                openNoticeModal();
+            }             
+        }
+        function drawLine(context, x1, y1, x2, y2) {
+            context.beginPath();
+            ctx.lineWidth = 10;    
+            context.strokeStyle = `${color}`;
+            context.lineWidth = 1;
+            context.moveTo(x1, y1);
+            context.lineTo(x2, y2);
+            context.stroke();
+            context.closePath();
+        }
         //加上active
-        
+        function ButtonActive(){
+            const isTextElement =document.querySelector('#drawTextButton svg');
+            const isRectangleElement =document.querySelector('#drawRectangle svg');
+            const isdrawLineElement =document.querySelector('#drawLine svg');            
+            if (isText){                
+                isTextElement.classList.add("active");
+            }else {
+                isTextElement.classList.remove("active");
+            }
+            if (isRectangle){                
+                isRectangleElement.classList.add("active");
+            }else {
+                isRectangleElement.classList.remove("active");
+            }
+            if (isdrawLine){                
+                isdrawLineElement.classList.add("active");
+            }else {
+                isdrawLineElement.classList.remove("active");
+            }
+
+        }
+        //初始圖片
+        function DrawNoImage(){
+            ctx.beginPath();
+            ctx.rect(0, 0, canvas.width - 0, canvas.height - 0);
+            ctx.strokeStyle = '#cccccc';
+            ctx.lineWidth = 15;                        
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.moveTo((canvas.width/5), canvas.height/8*5);
+            ctx.lineTo((canvas.width/3)+(canvas.width/6), canvas.height/8*5);
+            ctx.lineTo((canvas.width/6)+(canvas.width/6), canvas.height/8*3);//高點
+            ctx.fillStyle = '#cccccc';
+            ctx.fill();
+            ctx.beginPath();
+            ctx.moveTo(100 +(canvas.width/5.5), canvas.height/8*5);
+            ctx.lineTo(100 + (canvas.width/2)+(canvas.width/5.5), canvas.height/8*5);
+            ctx.lineTo(100 + (canvas.width/4)+(canvas.width/5.5), canvas.height/8*2);//高點
+            ctx.fillStyle = '#cccccc';
+            ctx.fill();
+            ctx.beginPath();
+            ctx.arc((canvas.width/4), (canvas.height/4), 30, 0, Math.PI * 2, true);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.font = '80px Arial';
+            ctx.textAlign = "center";
+            ctx.fillText("NO IMAGE", (canvas.width/2), canvas.height/8*7);
+            ctx.closePath();
+        }
+        //跳提醒框
+        function openNoticeModal() {
+            document.getElementById('NoticeModal').style.display = 'block';
+        }  
+        function closeNoticeModal() {
+            document.getElementById('NoticeModal').style.display = 'none';
+        } 
+        //插入圖層
+        function addOverlayImage(){
+            if (isImageLoaded){
+                document.getElementById('addOverlayImage').style.display = 'block';
+            }else{
+                document.getElementById('addOverlayImage').style.display = 'none';
+            }
+        }
+        //顏色
+        function colorModal(){
+            document.getElementById('colorModel').style.display = 'block';
+            //顏色監聽
+            const colorElements = document.getElementsByClassName("color");
+            for (const el of colorElements) {
+                el.addEventListener("click", () => {
+                    const computedStyle = window.getComputedStyle(el);
+                    color = computedStyle.backgroundColor; console.log(color);
+                    document.getElementById('colorModel').style.display = 'none';                    
+            });}
+        }        
+        //歷史紀錄
+        function saveState() {
+            // 將當前繪圖狀態保存到歷史紀錄            
+            history = history.slice(0, historyPointer + 1);console.log("save");
+            const currentState = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            history.push(currentState); console.log(history);
+            historyPointer = history.length - 1;
+            console.log("history.length="+history.length);console.log("historyPointer="+historyPointer);
+        }
+
+        function undo() {
+            console.log("historyPointer="+historyPointer);
+            if (historyPointer > 0) {
+                historyPointer--;
+                ctx.putImageData(history[historyPointer], 0, 0);console.log(history);
+            }
+        }
+
+        function redo() {
+            if (historyPointer < history.length - 1) {
+                historyPointer++;
+                ctx.putImageData(history[historyPointer], 0, 0);
+            }
+        }  
         function saveImage() {
             var dataURL = canvas.toDataURL('image/png');
             var link = document.createElement('a');
@@ -504,6 +680,8 @@
             //drawImageOnCanvas(backgroundImage, 0, 0, scaledWidth, scaledHeight);console.log(scaledHeight);
             redrawCanvas(); 
             isImageLoaded = true; 
+            addOverlayImage();
+            saveState();
         };
 
         overlayImage.onload = function () {
@@ -511,6 +689,7 @@
         };
 
         document.getElementById('backgroundImage').addEventListener('change', function (e) {
+            addOverlayImage();
             const file = e.target.files[0];
             if (file) {
                 backgroundImage.src = URL.createObjectURL(file);// 設定圖像的src為選擇的圖像文件                
@@ -527,17 +706,34 @@
                 newOverlay.onload = function () {
                     redrawCanvas();
                 };
-        }});
+        }}); 
+        //功能切換關掉提醒框
+        const colorElements = document.getElementsByClassName("menu__item");
+            for (const el of colorElements) {
+                el.addEventListener("click", () => {
+                    if(!isText){
+                        document.getElementById('TextModal').style.display = 'none';       
+                    }                                 
+            });}
         //裁切功能
-        document.getElementById('cropImage').addEventListener('click', cropImage);
-        document.getElementById('zoomIn').addEventListener('click', zoomInImage);
-        document.getElementById('zoomOut').addEventListener('click', zoomOutImage);
+        //document.getElementById('cropImage').addEventListener('click', cropImage);
+        //document.getElementById('zoomIn').addEventListener('click', zoomInImage);
+        //document.getElementById('zoomOut').addEventListener('click', zoomOutImage);
         //文字編輯功能
         document.getElementById('drawTextButton').addEventListener('click',EditText);
         document.getElementById('addText').addEventListener('click',addText);
         document.getElementById('cancelText').addEventListener('click',cancelText);
         //畫矩形框
         document.getElementById('drawRectangle').addEventListener('click',IsdrawRectangle);
+        //繪圖
+        document.getElementById('drawLine').addEventListener('click',IsdrawLine);
+        //關閉提醒框
+        document.getElementById('closeNoticeModal').addEventListener('click',closeNoticeModal);
+        //顏色選單
+        document.getElementById('color').addEventListener('click',colorModal);
+        //歷史狀態
+        document.getElementById('undo').addEventListener('click',undo);
+        document.getElementById('redo').addEventListener('click',redo);
 
         canvas.addEventListener('mousedown', handleMouseDown);
         canvas.addEventListener('mouseup', handleMouseUp);
@@ -546,41 +742,7 @@
         //canvas.addEventListener('mouseenter', handleMouseEnter);
         //canvas.addEventListener('mouseleave', handleMouseLeave);
 
-        /*做一點樣式動畫*//*
-        const menu = body.querySelector(".menu");
-        const menuItems = menu.querySelectorAll(".menu__item");
-        const menuBorder = menu.querySelector(".menu__border");
-        let activeItem = menu.querySelector(".active");
-        function clickItem(item, index) {
-
-            //menu.style.removeProperty("--timeOut");
-
-            if (activeItem == item) return;
-
-            if (activeItem) {
-                activeItem.classList.remove("active");
-            }
-
-
-            item.classList.add("active");
-            //body.style.backgroundColor = bgColorsBody[index];
-            activeItem = item;
-            offsetMenuBorder(activeItem, menuBorder);
-            }
-
-        function offsetMenuBorder(element, menuBorder) {
-            const offsetActiveItem = element.getBoundingClientRect();
-            const left = Math.floor(offsetActiveItem.left - menu.offsetLeft - (menuBorder.offsetWidth  - offsetActiveItem.width) / 2) +  "px";
-            menuBorder.style.transform = `translate3d(${left}, 0 , 0)`;
-        }
-
-offsetMenuBorder(activeItem, menuBorder);
-
-menuItems.forEach((item, index) => {
-
-    item.addEventListener("click", () => clickItem(item, index));
-
-})*/
+        
         }
     </script>
 <style type="text/css">
@@ -601,6 +763,7 @@ menuItems.forEach((item, index) => {
         width: 150px;
         height: 35px;letter-spacing: 2px;cursor: pointer;padding: 0;
         outline: none;
+        border-radius:  0.3rem;        
     }
     .menu__border{
         content: "";
@@ -676,11 +839,67 @@ menuItems.forEach((item, index) => {
         z-index: 99;
         content: '繪製矩形';
     }
+    #drawLine{
+        position:relative;
+    }
+    #drawLine:hover::before{
+        position: absolute;
+        top: -15px;
+        left: -73px;
+        color: rgb(0, 0, 0);
+        font-size: .8em;
+        background: #ffffff;
+        border: 1px solid rgba(0,0,0,.2);
+        padding: 5px;
+        border-radius: 5px;
+        z-index: 99;
+        content: '繪圖';
+    }
+    .active{
+        color: #fbbb3c;
+    }
+    #redColor{
+        width: 15px;
+        height: 15px;
+        border-radius: 25px;
+        background-color: rgb(255, 31, 31);
+        margin: 10px;
+    }
+    #orangeColor{
+        width: 15px;
+        height: 15px;
+        border-radius: 25px;
+        background-color: rgb(255, 154, 59);
+        margin: 10px;
+    }
+    #yellowColor{
+        width: 15px;
+        height: 15px;
+        border-radius: 25px;
+        background-color: rgb(0, 0, 0);
+        margin: 10px;
+    }
+    #greenColor{
+        width: 15px;
+        height: 15px;
+        border-radius: 25px;
+        background-color: rgb(71, 255, 111);
+        margin: 10px;
+    }
+    #blueColor{
+        width: 15px;
+        height: 15px;
+        border-radius: 25px;
+        background-color: rgb(0, 17, 255);
+        margin: 10px;
+    }
+    
+    
     </style>
   </head>
   <body onload="draw();" >
     <!--排版一下-->
-    <div style="margin: 0px auto 20px auto;max-width:1200px;">
+    <div style="margin: 0px auto 20px auto;max-width:900px;">
         <div style="width: 100%;height:100%;margin: 20px;    ">
             <div style="padding: 0px; vertical-align: middle;align-items: center;justify-content: space-between!important; display: flex; ">
                 <div style="width: 50%; display: flex;">
@@ -690,31 +909,28 @@ menuItems.forEach((item, index) => {
                 </div>                
                 <div style="padding: 25px;width: 50%;display: flex; ">
                     <div >
-                        <button class="button" type="button" style="background-color: white; border:1px solid #fbbb3c;border-radius:  0.3rem;text-align: center;margin:0px 20px ;">SAVE</button>
-                        <button class="button"onclick="saveImage()" type="button" style="background-color:#fbbb3c;border: none; border-radius:  0.3rem;color: black;text-align: center;">完成輸出</button>
+
+                        <label class="button"style="background-color:#fbbb3c;border: none; color: black;padding-block: 1px;
+                        padding-inline: 6px; ">上傳底圖<input type="file" id="backgroundImage" accept="image/*"style="width:1px;height:1px;"></label>
+    
+                        <button class="button"onclick="saveImage()" type="button" style="background-color: white; border:1px solid #fbbb3c;margin:0px 20px ;">完成輸出</button>
+                         
                     </div>          
                 </div>                
             </div>
             <div style="display: flex;    width: 20%;height: 18px;">                      
                 <div class="menu" style="height: 40px; display: flex;margin:25px 0px 25px 0px;">
-                    <div style="padding: 0px 25px; display: flex;flex-direction: column!important; background-color: white;">
-                        <div style="display: flex; align-items: center;">
-                            <button type="button"style="background-color:#fbbb3c;border: none; border-radius: 5px;color: black;text-align: center;align-items: center;">
-                                <label><svg xmlns="http://www.w3.org/2000/svg" width="25" height="25" fill="currentColor" class="bi bi-plus-square-dotted" viewBox="0 0 16 16">
-                                    <path d="M2.5 0c-.166 0-.33.016-.487.048l.194.98A1.51 1.51 0 0 1 2.5 1h.458V0H2.5zm2.292 0h-.917v1h.917V0zm1.833 0h-.917v1h.917V0zm1.833 0h-.916v1h.916V0zm1.834 0h-.917v1h.917V0zm1.833 0h-.917v1h.917V0zM13.5 0h-.458v1h.458c.1 0 .199.01.293.029l.194-.981A2.51 2.51 0 0 0 13.5 0zm2.079 1.11a2.511 2.511 0 0 0-.69-.689l-.556.831c.164.11.305.251.415.415l.83-.556zM1.11.421a2.511 2.511 0 0 0-.689.69l.831.556c.11-.164.251-.305.415-.415L1.11.422zM16 2.5c0-.166-.016-.33-.048-.487l-.98.194c.018.094.028.192.028.293v.458h1V2.5zM.048 2.013A2.51 2.51 0 0 0 0 2.5v.458h1V2.5c0-.1.01-.199.029-.293l-.981-.194zM0 3.875v.917h1v-.917H0zm16 .917v-.917h-1v.917h1zM0 5.708v.917h1v-.917H0zm16 .917v-.917h-1v.917h1zM0 7.542v.916h1v-.916H0zm15 .916h1v-.916h-1v.916zM0 9.375v.917h1v-.917H0zm16 .917v-.917h-1v.917h1zm-16 .916v.917h1v-.917H0zm16 .917v-.917h-1v.917h1zm-16 .917v.458c0 .166.016.33.048.487l.98-.194A1.51 1.51 0 0 1 1 13.5v-.458H0zm16 .458v-.458h-1v.458c0 .1-.01.199-.029.293l.981.194c.032-.158.048-.32.048-.487zM.421 14.89c.183.272.417.506.69.689l.556-.831a1.51 1.51 0 0 1-.415-.415l-.83.556zm14.469.689c.272-.183.506-.417.689-.69l-.831-.556c-.11.164-.251.305-.415.415l.556.83zm-12.877.373c.158.032.32.048.487.048h.458v-1H2.5c-.1 0-.199-.01-.293-.029l-.194.981zM13.5 16c.166 0 .33-.016.487-.048l-.194-.98A1.51 1.51 0 0 1 13.5 15h-.458v1h.458zm-9.625 0h.917v-1h-.917v1zm1.833 0h.917v-1h-.917v1zm1.834-1v1h.916v-1h-.916zm1.833 1h.917v-1h-.917v1zm1.833 0h.917v-1h-.917v1zM8.5 4.5a.5.5 0 0 0-1 0v3h-3a.5.5 0 0 0 0 1h3v3a.5.5 0 0 0 1 0v-3h3a.5.5 0 0 0 0-1h-3v-3z"/>
-                                  </svg>上傳底圖<input type="file" id="backgroundImage" accept="image/*"style="width:1px;height:1px;"></label>
-                            </button>                    
-                        </div>
+                    <div id="ButtonArea" style="padding: 0px 25px; display: flex;flex-direction: column!important; background-color: white;">
                         <div  style="padding: 10px;border:0px solid #fbbb3c; border-radius:  0.3rem;">
-                            <label>
-                                <svg xmlns="http://www.w3.org/2000/svg" width="25" height="25" fill="currentColor" class="bi bi-images" viewBox="0 0 16 16">
+                            <label id="addOverlayImage">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="25" height="25" fill="currentColor" class="bi bi-images" viewBox="0 0 16 16" >
                                     <path d="M4.502 9a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3z"/>
                                     <path d="M14.002 13a2 2 0 0 1-2 2h-10a2 2 0 0 1-2-2V5A2 2 0 0 1 2 3a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v8a2 2 0 0 1-1.998 2zM14 2H4a1 1 0 0 0-1 1h9.002a2 2 0 0 1 2 2v7A1 1 0 0 0 15 11V3a1 1 0 0 0-1-1zM2.002 4a1 1 0 0 0-1 1v8l2.646-2.354a.5.5 0 0 1 .63-.062l2.66 1.773 3.71-3.71a.5.5 0 0 1 .577-.094l1.777 1.947V5a1 1 0 0 0-1-1h-10z"/>
                                   </svg>
                                 <input type="file" id="overlayImage" accept="image/*"style="width:0px;height:0px;">
                                 </label>    
                         </div>
-                        <div style="padding: 10px;">
+                        <!--<div style="padding: 10px;">
                             <label id="zoomIn"><svg xmlns="http://www.w3.org/2000/svg" width="25" height="25" fill="currentColor" class="bi bi-zoom-in" viewBox="0 0 16 16">
                                 <path fill-rule="evenodd" d="M6.5 12a5.5 5.5 0 1 0 0-11 5.5 5.5 0 0 0 0 11zM13 6.5a6.5 6.5 0 1 1-13 0 6.5 6.5 0 0 1 13 0z"/>
                                 <path d="M10.344 11.742c.03.04.062.078.098.115l3.85 3.85a1 1 0 0 0 1.415-1.414l-3.85-3.85a1.007 1.007 0 0 0-.115-.1 6.538 6.538 0 0 1-1.398 1.4z"/>
@@ -727,14 +943,14 @@ menuItems.forEach((item, index) => {
                                 <path d="M10.344 11.742c.03.04.062.078.098.115l3.85 3.85a1 1 0 0 0 1.415-1.414l-3.85-3.85a1.007 1.007 0 0 0-.115-.1 6.538 6.538 0 0 1-1.398 1.4z"/>
                                 <path fill-rule="evenodd" d="M3 6.5a.5.5 0 0 1 .5-.5h6a.5.5 0 0 1 0 1h-6a.5.5 0 0 1-.5-.5z"/>
                               </svg></label>       
-                        </div>     
-                        <div class="menu__item" style="padding: 10px;">
+                        </div>   -->  
+                        <!--<div class="menu__item" style="padding: 10px;">
                             <label id="cropImage"><svg xmlns="http://www.w3.org/2000/svg" width="25" height="25" fill="currentColor" class="bi bi-scissors" viewBox="0 0 16 16">
                                 <path d="M3.5 3.5c-.614-.884-.074-1.962.858-2.5L8 7.226 11.642 1c.932.538 1.472 1.616.858 2.5L8.81 8.61l1.556 2.661a2.5 2.5 0 1 1-.794.637L8 9.73l-1.572 2.177a2.5 2.5 0 1 1-.794-.637L7.19 8.61 3.5 3.5zm2.5 10a1.5 1.5 0 1 0-3 0 1.5 1.5 0 0 0 3 0zm7 0a1.5 1.5 0 1 0-3 0 1.5 1.5 0 0 0 3 0z"/>
                               </svg></label>       
-                        </div>
+                        </div>-->  
                         <div class="menu__item" style="padding: 10px;">
-                            <label><svg xmlns="http://www.w3.org/2000/svg" width="25" height="25" fill="currentColor" class="bi bi-highlighter" viewBox="0 0 16 16">
+                            <label id="drawLine"><svg xmlns="http://www.w3.org/2000/svg" width="25" height="25" fill="currentColor" class="bi bi-highlighter" viewBox="0 0 16 16">
                                 <path fill-rule="evenodd" d="M11.096.644a2 2 0 0 1 2.791.036l1.433 1.433a2 2 0 0 1 .035 2.791l-.413.435-8.07 8.995a.5.5 0 0 1-.372.166h-3a.5.5 0 0 1-.234-.058l-.412.412A.5.5 0 0 1 2.5 15h-2a.5.5 0 0 1-.354-.854l1.412-1.412A.5.5 0 0 1 1.5 12.5v-3a.5.5 0 0 1 .166-.372l8.995-8.07.435-.414Zm-.115 1.47L2.727 9.52l3.753 3.753 7.406-8.254-2.905-2.906Zm3.585 2.17.064-.068a1 1 0 0 0-.017-1.396L13.18 1.387a1 1 0 0 0-1.396-.018l-.068.065 2.85 2.85ZM5.293 13.5 2.5 10.707v1.586L3.707 13.5h1.586Z"/>
                               </svg></label>
                         </div>      
@@ -749,19 +965,37 @@ menuItems.forEach((item, index) => {
                               </svg></label>
                         </div>
                         <div class="menu__item" style="padding: 10px;">
-                            <label id="chooseColor"><svg xmlns="http://www.w3.org/2000/svg" width="25" height="25" fill="currentColor" class="bi bi-palette-fill" viewBox="0 0 16 16">
+                            <label id="undo"><svg xmlns="http://www.w3.org/2000/svg" width="25" height="25" fill="currentColor" class="bi bi-arrow-return-left" viewBox="0 0 16 16">
+                                <path fill-rule="evenodd" d="M14.5 1.5a.5.5 0 0 1 .5.5v4.8a2.5 2.5 0 0 1-2.5 2.5H2.707l3.347 3.346a.5.5 0 0 1-.708.708l-4.2-4.2a.5.5 0 0 1 0-.708l4-4a.5.5 0 1 1 .708.708L2.707 8.3H12.5A1.5 1.5 0 0 0 14 6.8V2a.5.5 0 0 1 .5-.5"/>
+                              </svg></label>
+                        </div>
+                        <div class="menu__item" style="padding: 10px;">
+                            <label id="redo"><svg xmlns="http://www.w3.org/2000/svg" width="25" height="25" fill="currentColor" class="bi bi-arrow-return-right" viewBox="0 0 16 16">
+                                <path fill-rule="evenodd" d="M1.5 1.5A.5.5 0 0 0 1 2v4.8a2.5 2.5 0 0 0 2.5 2.5h9.793l-3.347 3.346a.5.5 0 0 0 .708.708l4.2-4.2a.5.5 0 0 0 0-.708l-4-4a.5.5 0 0 0-.708.708L13.293 8.3H3.5A1.5 1.5 0 0 1 2 6.8V2a.5.5 0 0 0-.5-.5"/>
+                              </svg></label>
+                        </div>
+                        <div class="menu__item" style="padding: 10px; position: relative;">
+                            <label id="color"><svg xmlns="http://www.w3.org/2000/svg" width="25" height="25" fill="currentColor" class="bi bi-palette-fill" viewBox="0 0 16 16">
                                 <path d="M12.433 10.07C14.133 10.585 16 11.15 16 8a8 8 0 1 0-8 8c1.996 0 1.826-1.504 1.649-3.08-.124-1.101-.252-2.237.351-2.92.465-.527 1.42-.237 2.433.07M8 5a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3m4.5 3a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3M5 6.5a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0m.5 6.5a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3"/>
                               </svg></label>
+                            <div id="colorModel" style="position:absolute;left: 1px;border: 1px solid rgba(0,0,0,.2);border-radius: 15px;top: 49px;display: none;">
+                                <div style="padding: 1px;">
+                                    <div id="redColor" class="color"></div>
+                                    <div id="orangeColor" class="color"></div>
+                                    <div id="yellowColor" class="color"></div>
+                                    <div id="greenColor" class="color"></div>
+                                    <div id="blueColor" class="color"></div>
+                                </div>                                
+                            </div>
                         </div>
                         <div class="menu__border"></div>                        
                     </div>
                 </div>
                 
             </div>   
-            <div style="width: 80%; margin:0px 80px;"><canvas id="myCanvas"style="border: 1px solid rgba(0,0,0,.2);border-radius:  0.3rem;max-width:100%;"  ></canvas></div>        
-            
-            <div style="margin: 15rem auto;max-width: 500px;"><!--待處理  這一塊會擋到畫布-->
-                <div  id="myModal"  style="position: fixed;top: 15rem ;display: none;z-index: 1060; text-align: center;   ">
+            <div style="width: 80%; margin:0px 80px;"><canvas id="myCanvas"style="border: 1px solid rgba(0,0,0,.2);border-radius:  0.3rem;max-width:100%; width:100%;"></canvas>
+            <div style="width: 100%;position: relative;"><!--編輯文字的彈跳視窗-->
+                <div  id="TextModal"  style="position: fixed;top: 40% ;left: 40%; display: none;z-index: 1060; text-align: center;   ">
                     <div style="position: relative;display: flex;flex-direction: column;width: 100%;pointer-events: auto;background-color: #fff;
                     background-clip: padding-box;
                     border: 1px solid rgba(0,0,0,.2);
@@ -774,6 +1008,22 @@ menuItems.forEach((item, index) => {
                     </div>
                     
                 </div>
+            </div>        
+            <div style="width: 100%;position: relative;"><!--若未載入底圖跳出提醒-->
+                <div  id="NoticeModal"  style="position: fixed;top: 40% ;left: 40%; display: none;z-index: 1060; text-align: center;   ">
+                    <div style="position: relative;display: flex;flex-direction: column;width: 100%;pointer-events: auto;background-color: #fff;
+                    background-clip: padding-box;
+                    border: 1px solid rgba(0,0,0,.2);
+                    border-radius: 0.3rem;padding: 0.3rem;
+                    outline: 0;">
+                        <div style="padding: 0.3rem;"><label for="textInput">請先加入底圖</label></div>
+                        <div><button id="closeNoticeModal">確定</button></div>
+                    </div>
+                    
+                </div>
+            </div>        
+            
+            
             <!--插入游標圖案--不使用了
             <div class="mouseImg">
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-cursor-text" viewBox="0 0 16 16">
