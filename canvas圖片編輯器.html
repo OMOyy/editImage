@@ -50,16 +50,10 @@
              mouseY = e.clientY - canvas.getBoundingClientRect().top;
             //畫矩形框
             if(isRectangle){
-                if (
-                        mouseX >= canvas.getBoundingClientRect().left &&
-                        mouseX <= canvas.getBoundingClientRect().right  &&
-                        mouseY >= canvas.getBoundingClientRect().top  &&
-                        mouseY <= canvas.getBoundingClientRect().bottom
-                    ) {
-                        rectangleStartX = mouseX;
-                        rectangleStartY = mouseY;
-                        isDrawingRectangle = true;
-                    }
+                rectangleStartX = mouseX;
+                rectangleStartY = mouseY;
+                isDrawingRectangle = true;
+                
             }else if(isCropping && isImageLoaded){   
                 drawcheck((backgroundImage.width+canvas.getBoundingClientRect().left)/2,canvas.getBoundingClientRect().top);   
                 //裁切功能 //let cropLeft, cropTop, cropDown, cropRight;  
@@ -89,7 +83,7 @@
                         isDragging = true;
                         selectedOverlayIndex = overlayImages.length - 1;
                         // 將被點擊的圖層移至陣列的最頂部
-                        overlayImages.push(overlayImages.splice(i, 1)[0]);                    
+                        overlayImages.push(overlayImages.splice(i, 1)[0]); console.log("點擊");console.log(overlayImages);                   
                         isClick = true;//縮放功能 - 邊框
                         break;
                     }
@@ -105,9 +99,7 @@
                         mouseY <= scaleHandleY + scaleHandleRadius
                     ) {
                         resizing = true;
-                        selectedOverlayIndex = i;
-                        initialWidth = overlay.image.width;
-                        initialHeight = overlay.image.height;
+                        selectedOverlayIndex = i;                        
                         break;
                     }
                     //刪除功能
@@ -132,9 +124,11 @@
             if (isClick && selectedOverlayIndex !== -1){                 
                 const overlay = overlayImages[selectedOverlayIndex];
                 ctx.strokeStyle = 'black';
-                ctx.strokeRect(overlay.x, overlay.y, overlay.image.width, overlay.image.height);console.log(overlay.image.width);
+                ctx.strokeRect(overlay.x, overlay.y, overlay.image.width, overlay.image.height);
                 const scaledWidth = overlay.image.width;
                 const scaledHeight = overlay.image.height;
+                initialWidth = overlay.image.width;
+                initialHeight = overlay.image.height;
                 drawScaleHandle(overlay.x + scaledWidth, overlay.y + scaledHeight);
                 drawDeleteIcon( overlay.x,overlay.y);                
             }                        
@@ -173,7 +167,6 @@
                     isRectCanvas: true,
                  });
                 j++;
-                console.log(overlayImages);
                 isRectangle = false;              
                 redrawCanvas(); 
             }
@@ -185,12 +178,11 @@
                 const overlay = overlayImages[selectedOverlayIndex];
                 overlay.x = e.clientX - canvas.getBoundingClientRect().left - overlay.image.width / 2;
                 overlay.y = e.clientY - canvas.getBoundingClientRect().top - overlay.image.height / 2;
-                console.log(overlay.image);
-                redrawCanvas();console.log("拖動圖層");
+                redrawCanvas();
             }else if (isDrawingRectangle) {//畫矩形框
                 const mouseX = e.clientX - canvas.getBoundingClientRect().left;
                 const mouseY = e.clientY - canvas.getBoundingClientRect().top;                     
-                redrawCanvas();console.log("矩形");
+                redrawCanvas();
                 drawRectangle(ctx,rectangleStartX, rectangleStartY, mouseX, mouseY);            
             }else if(isCrop && isImageLoaded){//裁切功能
                 mouseX = e.clientX - canvas.getBoundingClientRect().left;
@@ -220,9 +212,13 @@
                 mouseY = e.clientY - canvas.getBoundingClientRect().top;
                 const overlay = overlayImages[selectedOverlayIndex];
                 const deltaX = mouseX - (overlay.x + overlay.image.width);
-                const deltaY = mouseY - (overlay.y + overlay.image.height);
-                const newWidth = initialWidth + deltaX;
-                const newHeight = initialHeight + deltaY;
+                const deltaY = mouseY - (overlay.y + overlay.image.height);                
+                //const newWidth = initialWidth + deltaX;
+                //const newHeight = initialHeight + deltaY;
+                let newWidth, newHeight;
+                const aspectRatio = initialWidth / initialHeight;
+                newHeight = initialHeight + deltaY;
+                newWidth = newHeight * aspectRatio;//只能等比例放大縮小
 
                 //旋轉功能
                 // 計算用戶拖動的角度
@@ -232,23 +228,53 @@
                 if(overlay.isRectCanvas && resizing){
                     overlayImages.splice(selectedOverlayIndex, 1);
                     const rectCanvas = document.createElement('canvas');
-                    rectCanvas.width = newWidth;
-                    rectCanvas.height = newHeight;
-                    const rectCtx = rectCanvas.getContext('2d');
-                    drawRectangle(rectCtx,0, 0, rectCanvas.width, rectCanvas.height);                
-                    overlayImages.push({
-                        number:j, 
-                        image: rectCanvas, 
-                        x: overlay.x, 
-                        y: overlay.y, 
-                        width:rectCanvas.width, 
-                        height:rectCanvas.height,
-                        isRectCanvas: true,
-                 });
-                j++;
+                    if(newWidth > 50){
+                        rectCanvas.width = newWidth;
+                        rectCanvas.height = newHeight;
+                        const rectCtx = rectCanvas.getContext('2d');
+                        drawRectangle(rectCtx,0, 0, rectCanvas.width, rectCanvas.height);                
+                        overlayImages.push({
+                            number:j, 
+                            image: rectCanvas, 
+                            x: overlay.x, 
+                            y: overlay.y, 
+                            width:rectCanvas.width, 
+                            height:rectCanvas.height,
+                            isRectCanvas: true,
+                        });
+                        j++;
+                    }                    
+               }else if(overlay.isText && resizing){
+                    overlayImages.splice(selectedOverlayIndex, 1);
+                    const textCanvas = document.createElement('canvas');
+                    if(newWidth > 50){
+                        textCanvas.width = newWidth;
+                        textCanvas.height = newHeight;
+                        const textCtx = textCanvas.getContext('2d');
+                        textCtx.beginPath();
+                        textCtx.font = `${newHeight}px 微软雅黑`;
+                        textCtx.fillStyle = "black";
+                        textCtx.textBaseline = "top";
+                        textCtx.textAlign = "left";
+                        textCtx.fillText(overlay.text, 1, 1);  
+                        textCtx.closePath();
+                        overlayImages.push({
+                            number:j, 
+                            image: textCanvas, 
+                            x: overlay.x, 
+                            y: overlay.y, 
+                            width:textCanvas.width, 
+                            height:textCanvas.height,
+                            isText:true,
+                            text:overlay.text,
+                        });     
+                        j++;
+                    }   
                }else{
+                if(newWidth > 50){
                     overlay.image.width = newWidth;
                     overlay.image.height = newHeight;
+                }
                 }                            
                 redrawCanvas();
             }                       
@@ -382,13 +408,13 @@
             textCtx2.textAlign = "left";
             textCtx2.fillText(text, 1, 1);  
             textCtx2.closePath();
-             // 将 textCanvas 转换为 Data URL
-            const dataURL = textCanvas2.toDataURL();
-            const textimage = new Image();
-            textimage.src = dataURL;
+            // 將 textCanvas 轉換成 Data URL
+            //const dataURL = textCanvas2.toDataURL();
+            //const textimage = new Image();
+            //textimage.src = dataURL;
             overlayImages.push({
                     number:j, 
-                    image: textimage, 
+                    image: textCanvas2, 
                     x: x, 
                     y: y, 
                     width:textCanvas2.width+1, 
@@ -396,7 +422,7 @@
                     isText:true,
                     text:text,
                  });
-                j++;         console.log(overlayImages);                  
+                j++;             
             redrawCanvas();
             
         };     
@@ -407,13 +433,18 @@
             const textInput = document.getElementById('textInput');
             const text = textInput.value.trim();
             // 將文字繪製成圖層
-            drawText(text,50,50);
+            drawText(text,canvas.width/2,canvas.height/2);
             // 關閉模態對話框
             isText = false;   
             document.getElementById('myModal').style.display = 'none';
             // 清空輸入框
             textInput.value = '';
         }       
+        function cancelText(){
+            isText = false;   
+            document.getElementById('myModal').style.display = 'none';
+            textInput.value = '';
+        }
         //畫矩形框        
         function IsdrawRectangle(){
             isRectangle = true;
@@ -427,6 +458,8 @@
             canvas.stroke();
             canvas.closePath();
         }
+        //加上active
+        
         function saveImage() {
             var dataURL = canvas.toDataURL('image/png');
             var link = document.createElement('a');
@@ -502,6 +535,7 @@
         //文字編輯功能
         document.getElementById('drawTextButton').addEventListener('click',EditText);
         document.getElementById('addText').addEventListener('click',addText);
+        document.getElementById('cancelText').addEventListener('click',cancelText);
         //畫矩形框
         document.getElementById('drawRectangle').addEventListener('click',IsdrawRectangle);
 
@@ -549,12 +583,15 @@ menuItems.forEach((item, index) => {
 })*/
         }
     </script>
-    <style type="text/css">
-      canvas {
+<style type="text/css">
+    canvas {
         border: 1px solid white;
-      }
-      
-      .button{
+    }
+    body{
+        margin: 8px 30px !important;
+        min-width: 825px;
+    }
+    .button{
         font-weight: 600;
         cursor: pointer;
         vertical-align: middle;
@@ -564,8 +601,8 @@ menuItems.forEach((item, index) => {
         width: 150px;
         height: 35px;letter-spacing: 2px;cursor: pointer;padding: 0;
         outline: none;
-      }
-      .menu__border{
+    }
+    .menu__border{
         content: "";
         z-index: -1;
         width: 4.2em;
@@ -575,10 +612,70 @@ menuItems.forEach((item, index) => {
         transform: scale(0);
         transition: background-color var(--duration), transform var(--duration);
       }
-      .mouseImg{
-            position: fixed; /*讓游標圖案隨網頁移動*/
-            /*沒有設定top/left等等是因為要用js控制*/
-        }
+    #zoomIn{
+        position:relative;
+    }
+    #zoomIn:hover::before{
+        position: absolute;
+        top: -15px;
+        left: -73px;
+        color: rgb(0, 0, 0);
+        font-size: .8em;
+        background: #ffffff;
+        border: 1px solid rgba(0,0,0,.2);
+        padding: 5px;
+        border-radius: 5px;
+        z-index: 99;
+        content: '底圖放大';
+    }
+    #zoomOut{
+        position:relative;
+    }
+    #zoomOut:hover::before{
+        position: absolute;
+        top: -15px;
+        left: -73px;
+        color: rgb(0, 0, 0);
+        font-size: .8em;
+        background: #ffffff;
+        border: 1px solid rgba(0,0,0,.2);
+        padding: 5px;
+        border-radius: 5px;
+        z-index: 99;
+        content: '底圖縮小';
+    }
+    #drawTextButton{
+        position:relative;
+    }
+    #drawTextButton:hover::before{
+        position: absolute;
+        top: -15px;
+        left: -73px;
+        color: rgb(0, 0, 0);
+        font-size: .8em;
+        background: #ffffff;
+        border: 1px solid rgba(0,0,0,.2);
+        padding: 5px;
+        border-radius: 5px;
+        z-index: 99;
+        content: '插入文字';
+    }
+    #drawRectangle{
+        position:relative;
+    }
+    #drawRectangle:hover::before{
+        position: absolute;
+        top: -15px;
+        left: -73px;
+        color: rgb(0, 0, 0);
+        font-size: .8em;
+        background: #ffffff;
+        border: 1px solid rgba(0,0,0,.2);
+        padding: 5px;
+        border-radius: 5px;
+        z-index: 99;
+        content: '繪製矩形';
+    }
     </style>
   </head>
   <body onload="draw();" >
@@ -586,27 +683,35 @@ menuItems.forEach((item, index) => {
     <div style="margin: 0px auto 20px auto;max-width:1200px;">
         <div style="width: 100%;height:100%;margin: 20px;    ">
             <div style="padding: 0px; vertical-align: middle;align-items: center;justify-content: space-between!important; display: flex; ">
-                <div style="width: 30%; ">
-                    <h1 style="padding-top: 0; color: #fbbb3c;font-family: 'Noto Sans', sans-serif;"> Image Editor</h1>
+                <div style="width: 50%; display: flex;">
+                    <svg xmlns="http://www.w3.org/2000/svg"style=" color: #fbbb3c; padding: 25px;" width="40" height="40" fill="currentColor" class="bi bi-highlighter" viewBox="0 0 16 16">
+                        <path fill-rule="evenodd" d="M11.096.644a2 2 0 0 1 2.791.036l1.433 1.433a2 2 0 0 1 .035 2.791l-.413.435-8.07 8.995a.5.5 0 0 1-.372.166h-3a.5.5 0 0 1-.234-.058l-.412.412A.5.5 0 0 1 2.5 15h-2a.5.5 0 0 1-.354-.854l1.412-1.412A.5.5 0 0 1 1.5 12.5v-3a.5.5 0 0 1 .166-.372l8.995-8.07.435-.414Zm-.115 1.47L2.727 9.52l3.753 3.753 7.406-8.254-2.905-2.906Zm3.585 2.17.064-.068a1 1 0 0 0-.017-1.396L13.18 1.387a1 1 0 0 0-1.396-.018l-.068.065 2.85 2.85ZM5.293 13.5 2.5 10.707v1.586L3.707 13.5h1.586Z"/>
+                      </svg><h1 style="padding-top: 0; color: #fbbb3c;font-family: 'Noto Sans', sans-serif;"> Image Editor</h1>
                 </div>                
-                <div style="padding: 25px; ">
+                <div style="padding: 25px;width: 50%;display: flex; ">
                     <div >
-                        <button class="button" type="button" style="background-color: white; border:1px solid #fbbb3c;border-radius: 50px;text-align: center;margin:0px 20px ;">SAVE</button>
-                        <button class="button"onclick="saveImage()" type="button" style="background-color:#fbbb3c;border: none; border-radius: 50px;color: black;text-align: center;">完成輸出</button>
+                        <button class="button" type="button" style="background-color: white; border:1px solid #fbbb3c;border-radius:  0.3rem;text-align: center;margin:0px 20px ;">SAVE</button>
+                        <button class="button"onclick="saveImage()" type="button" style="background-color:#fbbb3c;border: none; border-radius:  0.3rem;color: black;text-align: center;">完成輸出</button>
                     </div>          
-                </div>
-                
+                </div>                
             </div>
-            <div style="display: flex;">                      
-                <div class="menu" style="height: 40px; display: flex; background-color: white;border:1px solid #fbbb3c; border-radius: 25px;margin:25px 0px 25px 0px;">
-                    <div style="padding: 0px 25px; display: flex;">
-                        <div  style="padding: 10px;">
+            <div style="display: flex;    width: 20%;height: 18px;">                      
+                <div class="menu" style="height: 40px; display: flex;margin:25px 0px 25px 0px;">
+                    <div style="padding: 0px 25px; display: flex;flex-direction: column!important; background-color: white;">
+                        <div style="display: flex; align-items: center;">
+                            <button type="button"style="background-color:#fbbb3c;border: none; border-radius: 5px;color: black;text-align: center;align-items: center;">
+                                <label><svg xmlns="http://www.w3.org/2000/svg" width="25" height="25" fill="currentColor" class="bi bi-plus-square-dotted" viewBox="0 0 16 16">
+                                    <path d="M2.5 0c-.166 0-.33.016-.487.048l.194.98A1.51 1.51 0 0 1 2.5 1h.458V0H2.5zm2.292 0h-.917v1h.917V0zm1.833 0h-.917v1h.917V0zm1.833 0h-.916v1h.916V0zm1.834 0h-.917v1h.917V0zm1.833 0h-.917v1h.917V0zM13.5 0h-.458v1h.458c.1 0 .199.01.293.029l.194-.981A2.51 2.51 0 0 0 13.5 0zm2.079 1.11a2.511 2.511 0 0 0-.69-.689l-.556.831c.164.11.305.251.415.415l.83-.556zM1.11.421a2.511 2.511 0 0 0-.689.69l.831.556c.11-.164.251-.305.415-.415L1.11.422zM16 2.5c0-.166-.016-.33-.048-.487l-.98.194c.018.094.028.192.028.293v.458h1V2.5zM.048 2.013A2.51 2.51 0 0 0 0 2.5v.458h1V2.5c0-.1.01-.199.029-.293l-.981-.194zM0 3.875v.917h1v-.917H0zm16 .917v-.917h-1v.917h1zM0 5.708v.917h1v-.917H0zm16 .917v-.917h-1v.917h1zM0 7.542v.916h1v-.916H0zm15 .916h1v-.916h-1v.916zM0 9.375v.917h1v-.917H0zm16 .917v-.917h-1v.917h1zm-16 .916v.917h1v-.917H0zm16 .917v-.917h-1v.917h1zm-16 .917v.458c0 .166.016.33.048.487l.98-.194A1.51 1.51 0 0 1 1 13.5v-.458H0zm16 .458v-.458h-1v.458c0 .1-.01.199-.029.293l.981.194c.032-.158.048-.32.048-.487zM.421 14.89c.183.272.417.506.69.689l.556-.831a1.51 1.51 0 0 1-.415-.415l-.83.556zm14.469.689c.272-.183.506-.417.689-.69l-.831-.556c-.11.164-.251.305-.415.415l.556.83zm-12.877.373c.158.032.32.048.487.048h.458v-1H2.5c-.1 0-.199-.01-.293-.029l-.194.981zM13.5 16c.166 0 .33-.016.487-.048l-.194-.98A1.51 1.51 0 0 1 13.5 15h-.458v1h.458zm-9.625 0h.917v-1h-.917v1zm1.833 0h.917v-1h-.917v1zm1.834-1v1h.916v-1h-.916zm1.833 1h.917v-1h-.917v1zm1.833 0h.917v-1h-.917v1zM8.5 4.5a.5.5 0 0 0-1 0v3h-3a.5.5 0 0 0 0 1h3v3a.5.5 0 0 0 1 0v-3h3a.5.5 0 0 0 0-1h-3v-3z"/>
+                                  </svg>上傳底圖<input type="file" id="backgroundImage" accept="image/*"style="width:1px;height:1px;"></label>
+                            </button>                    
+                        </div>
+                        <div  style="padding: 10px;border:0px solid #fbbb3c; border-radius:  0.3rem;">
                             <label>
                                 <svg xmlns="http://www.w3.org/2000/svg" width="25" height="25" fill="currentColor" class="bi bi-images" viewBox="0 0 16 16">
                                     <path d="M4.502 9a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3z"/>
                                     <path d="M14.002 13a2 2 0 0 1-2 2h-10a2 2 0 0 1-2-2V5A2 2 0 0 1 2 3a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v8a2 2 0 0 1-1.998 2zM14 2H4a1 1 0 0 0-1 1h9.002a2 2 0 0 1 2 2v7A1 1 0 0 0 15 11V3a1 1 0 0 0-1-1zM2.002 4a1 1 0 0 0-1 1v8l2.646-2.354a.5.5 0 0 1 .63-.062l2.66 1.773 3.71-3.71a.5.5 0 0 1 .577-.094l1.777 1.947V5a1 1 0 0 0-1-1h-10z"/>
                                   </svg>
-                                <input type="file" id="overlayImage" accept="image/*"style="width:1px;height:1px;">
+                                <input type="file" id="overlayImage" accept="image/*"style="width:0px;height:0px;">
                                 </label>    
                         </div>
                         <div style="padding: 10px;">
@@ -629,11 +734,6 @@ menuItems.forEach((item, index) => {
                               </svg></label>       
                         </div>
                         <div class="menu__item" style="padding: 10px;">
-                            <label><svg xmlns="http://www.w3.org/2000/svg" width="25" height="25" fill="currentColor" class="bi bi-marker-tip" viewBox="0 0 16 16">
-                                <path d="M16 8A8 8 0 1 1 0 8a8 8 0 0 1 16 0Zm-4.5 6.064-1.281-4.696A.5.5 0 0 0 9.736 9H6.264a.5.5 0 0 0-.483.368l-1.28 4.696A6.968 6.968 0 0 0 8 15c1.275 0 2.47-.34 3.5-.936Zm.873-.598a7 7 0 1 0-8.746 0l1.19-4.36a1.5 1.5 0 0 1 1.31-1.1l1.155-3.851c.213-.713 1.223-.713 1.436 0l1.156 3.851a1.5 1.5 0 0 1 1.31 1.1l1.189 4.36Z"/>
-                              </svg></label>
-                        </div>
-                        <div class="menu__item" style="padding: 10px;">
                             <label><svg xmlns="http://www.w3.org/2000/svg" width="25" height="25" fill="currentColor" class="bi bi-highlighter" viewBox="0 0 16 16">
                                 <path fill-rule="evenodd" d="M11.096.644a2 2 0 0 1 2.791.036l1.433 1.433a2 2 0 0 1 .035 2.791l-.413.435-8.07 8.995a.5.5 0 0 1-.372.166h-3a.5.5 0 0 1-.234-.058l-.412.412A.5.5 0 0 1 2.5 15h-2a.5.5 0 0 1-.354-.854l1.412-1.412A.5.5 0 0 1 1.5 12.5v-3a.5.5 0 0 1 .166-.372l8.995-8.07.435-.414Zm-.115 1.47L2.727 9.52l3.753 3.753 7.406-8.254-2.905-2.906Zm3.585 2.17.064-.068a1 1 0 0 0-.017-1.396L13.18 1.387a1 1 0 0 0-1.396-.018l-.068.065 2.85 2.85ZM5.293 13.5 2.5 10.707v1.586L3.707 13.5h1.586Z"/>
                               </svg></label>
@@ -648,17 +748,18 @@ menuItems.forEach((item, index) => {
                                 <path d="M14 1a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H2a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1h12zM2 0a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V2a2 2 0 0 0-2-2H2z"/>
                               </svg></label>
                         </div>
+                        <div class="menu__item" style="padding: 10px;">
+                            <label id="chooseColor"><svg xmlns="http://www.w3.org/2000/svg" width="25" height="25" fill="currentColor" class="bi bi-palette-fill" viewBox="0 0 16 16">
+                                <path d="M12.433 10.07C14.133 10.585 16 11.15 16 8a8 8 0 1 0-8 8c1.996 0 1.826-1.504 1.649-3.08-.124-1.101-.252-2.237.351-2.92.465-.527 1.42-.237 2.433.07M8 5a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3m4.5 3a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3M5 6.5a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0m.5 6.5a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3"/>
+                              </svg></label>
+                        </div>
                         <div class="menu__border"></div>                        
                     </div>
                 </div>
-                <div style="display: flex; align-items: center;">
-                    <button type="button"style="background-color:#fbbb3c;border: none; border-radius: 5px;color: black;text-align: center;align-items: center;">
-                        <label><svg xmlns="http://www.w3.org/2000/svg" width="25" height="25" fill="currentColor" class="bi bi-plus-square-dotted" viewBox="0 0 16 16">
-                            <path d="M2.5 0c-.166 0-.33.016-.487.048l.194.98A1.51 1.51 0 0 1 2.5 1h.458V0H2.5zm2.292 0h-.917v1h.917V0zm1.833 0h-.917v1h.917V0zm1.833 0h-.916v1h.916V0zm1.834 0h-.917v1h.917V0zm1.833 0h-.917v1h.917V0zM13.5 0h-.458v1h.458c.1 0 .199.01.293.029l.194-.981A2.51 2.51 0 0 0 13.5 0zm2.079 1.11a2.511 2.511 0 0 0-.69-.689l-.556.831c.164.11.305.251.415.415l.83-.556zM1.11.421a2.511 2.511 0 0 0-.689.69l.831.556c.11-.164.251-.305.415-.415L1.11.422zM16 2.5c0-.166-.016-.33-.048-.487l-.98.194c.018.094.028.192.028.293v.458h1V2.5zM.048 2.013A2.51 2.51 0 0 0 0 2.5v.458h1V2.5c0-.1.01-.199.029-.293l-.981-.194zM0 3.875v.917h1v-.917H0zm16 .917v-.917h-1v.917h1zM0 5.708v.917h1v-.917H0zm16 .917v-.917h-1v.917h1zM0 7.542v.916h1v-.916H0zm15 .916h1v-.916h-1v.916zM0 9.375v.917h1v-.917H0zm16 .917v-.917h-1v.917h1zm-16 .916v.917h1v-.917H0zm16 .917v-.917h-1v.917h1zm-16 .917v.458c0 .166.016.33.048.487l.98-.194A1.51 1.51 0 0 1 1 13.5v-.458H0zm16 .458v-.458h-1v.458c0 .1-.01.199-.029.293l.981.194c.032-.158.048-.32.048-.487zM.421 14.89c.183.272.417.506.69.689l.556-.831a1.51 1.51 0 0 1-.415-.415l-.83.556zm14.469.689c.272-.183.506-.417.689-.69l-.831-.556c-.11.164-.251.305-.415.415l.556.83zm-12.877.373c.158.032.32.048.487.048h.458v-1H2.5c-.1 0-.199-.01-.293-.029l-.194.981zM13.5 16c.166 0 .33-.016.487-.048l-.194-.98A1.51 1.51 0 0 1 13.5 15h-.458v1h.458zm-9.625 0h.917v-1h-.917v1zm1.833 0h.917v-1h-.917v1zm1.834-1v1h.916v-1h-.916zm1.833 1h.917v-1h-.917v1zm1.833 0h.917v-1h-.917v1zM8.5 4.5a.5.5 0 0 0-1 0v3h-3a.5.5 0 0 0 0 1h3v3a.5.5 0 0 0 1 0v-3h3a.5.5 0 0 0 0-1h-3v-3z"/>
-                          </svg>上傳底圖<input type="file" id="backgroundImage" accept="image/*"style="width:1px;height:1px;"></label>
-                    </button>                    
-                </div>
-            </div>           
+                
+            </div>   
+            <div style="width: 80%; margin:0px 80px;"><canvas id="myCanvas"style="border: 1px solid rgba(0,0,0,.2);border-radius:  0.3rem;max-width:100%;"  ></canvas></div>        
+            
             <div style="margin: 15rem auto;max-width: 500px;"><!--待處理  這一塊會擋到畫布-->
                 <div  id="myModal"  style="position: fixed;top: 15rem ;display: none;z-index: 1060; text-align: center;   ">
                     <div style="position: relative;display: flex;flex-direction: column;width: 100%;pointer-events: auto;background-color: #fff;
@@ -669,15 +770,16 @@ menuItems.forEach((item, index) => {
                         <div style="padding: 0.3rem;"><label for="textInput">請輸入文字：</label></div>
                         <div><input type="text" id="textInput"></div>
                         <div><button id="addText">確定</button></div>
+                        <div><button id="cancelText">取消</button></div>
                     </div>
                     
                 </div>
-            <canvas id="myCanvas"  ></canvas>
-            <div class="mouseImg"><!--插入游標圖案-->
+            <!--插入游標圖案--不使用了
+            <div class="mouseImg">
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-cursor-text" viewBox="0 0 16 16">
                     <path d="M5 2a.5.5 0 0 1 .5-.5c.862 0 1.573.287 2.06.566.174.099.321.198.44.286.119-.088.266-.187.44-.286A4.165 4.165 0 0 1 10.5 1.5a.5.5 0 0 1 0 1c-.638 0-1.177.213-1.564.434a3.49 3.49 0 0 0-.436.294V7.5H9a.5.5 0 0 1 0 1h-.5v4.272c.1.08.248.187.436.294.387.221.926.434 1.564.434a.5.5 0 0 1 0 1 4.165 4.165 0 0 1-2.06-.566A4.561 4.561 0 0 1 8 13.65a4.561 4.561 0 0 1-.44.285 4.165 4.165 0 0 1-2.06.566.5.5 0 0 1 0-1c.638 0 1.177-.213 1.564-.434.188-.107.335-.214.436-.294V8.5H7a.5.5 0 0 1 0-1h.5V3.228a3.49 3.49 0 0 0-.436-.294A3.166 3.166 0 0 0 5.5 2.5.5.5 0 0 1 5 2zm3.352 1.355zm-.704 9.29z"/>
                   </svg>
-            </div>
+            </div>-->
             </div>
         </div>
     </div>
