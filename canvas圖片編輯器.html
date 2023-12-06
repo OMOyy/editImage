@@ -48,15 +48,20 @@
         let isText = false;
         let isDrawing = false;
         let fontSize = 36;
-
         //繪圖
         let isdrawLine = false;
         let drawLineX , drawLineY;
+        let drawLineEndX, drawLineEndY;
         let isDrawingLine = false;
-
+        let check = false;
+        let checkIconWidth = 80;
+        let checkIconHeight = 30;
+        let boundingBox;
+        let i=0;
+        const points = [];
         //歷史紀錄
         let history = [];
-        let historyPointer = 0;
+        let historyPointer = -1;
 
         //顏色
         let color ;
@@ -74,25 +79,9 @@
                 rectangleStartY = mouseY;
                 isDrawingRectangle = true;
                 
-            }else if(isCropping && isImageLoaded){   
-                drawcheck((backgroundImage.width+canvas.getBoundingClientRect().left)/2,canvas.getBoundingClientRect().top);   
-                //裁切功能 //let cropLeft, cropTop, cropDown, cropRight;  
-                if( mouseX == cropX && mouseY >= backgroundImage.y && mouseY <= backgroundImage.y + backgroundImage.height ){
-                            cropLeft = true;
-                        }   
-                        if( mouseX == cropX + backgroundImage.width && mouseY >= backgroundImage.y && mouseY <= backgroundImage.y + backgroundImage.height ){
-                            cropRight = true;
-                        }
-                        if( mouseY == cropY && mouseX >= backgroundImage.x && mouseX <= backgroundImage.x + backgroundImage.width ){
-                            cropTop = true;
-                        }
-                        if( mouseY == cropY + backgroundImage.height && mouseX >= backgroundImage.x && mouseX <= backgroundImage.x + backgroundImage.width ){
-                            cropDown = true;
-                        }              
-                                                         
             }else {
                 for (let i = overlayImages.length - 1; i >= 0; i--) {
-                    const overlay = overlayImages[i];console.log(overlayImages);      console.log(mouseX);      console.log(mouseY);    
+                    const overlay = overlayImages[i];console.log(overlayImages);                       
                     //確定滑鼠在該圖檔上點擊
                     if (
                         mouseX >= overlay.x + deleteIconSize/2 &&
@@ -189,16 +178,18 @@
                     isRectCanvas: true,
                  });
                 j++;
-                isRectangle = false;ButtonActive();          
-                redrawCanvas();      
+                isRectangle = false;
+                ButtonActive();          
+                redrawCanvas();    
             }else if(isDrawingLine){//繪圖功能
-                drawLine(ctx, drawLineX, drawLineY, mouseX, mouseY);
+                drawLine(ctx, drawLineX, drawLineY, mouseX, mouseY); 
+                drawLineOnTempCanvas(drawLineX, drawLineY, mouseX, mouseY);                               
                 drawLineX = - canvas.getBoundingClientRect().left;
                 drawLineY = - canvas.getBoundingClientRect().top;
-                isDrawingLine = false;
-                isdrawLine = false; 
-                ButtonActive();               
-                saveState();
+                isDrawingLine = false;   
+                drawLineEndX = mouseX;
+                drawLineEndY = mouseY;
+                saveState();                                  
             }            
         }
         
@@ -239,8 +230,10 @@
                 mouseX = e.clientX - canvas.getBoundingClientRect().left ;
                 mouseY = e.clientY - canvas.getBoundingClientRect().top ;
                 drawLine(ctx, drawLineX, drawLineY, mouseX, mouseY);
+                drawLineOnTempCanvas(drawLineX, drawLineY, mouseX, mouseY);
                 drawLineX = mouseX;
                 drawLineY = mouseY;
+                points.push({ x: mouseX, y: mouseY });
             }
             //縮放功能 
             if (resizing && selectedOverlayIndex !== -1) {
@@ -280,7 +273,7 @@
                         });
                         j++;
                     }                    
-               }else if(overlay.isText && resizing){
+               }else if(overlay.isText && resizing){ //文字功能
                     overlayImages.splice(selectedOverlayIndex, 1);
                     const textCanvas = document.createElement('canvas');
                     if(newWidth > 50){
@@ -325,7 +318,7 @@
             ctx.clearRect(0, 0, canvas.width, canvas.height);
         }
         function redrawCanvas() {
-            clearCanvas();
+            clearCanvas();            
             // 計算等比例缩放比例
             const scale = canvas.width / backgroundImage.width;//Math.min(, canvas.height / backgroundImage.height)
             const scaledWidth = backgroundImage.width * scale;
@@ -333,16 +326,44 @@
             if(scaledHeight > canvas.height){
                 canvas.height = scaledHeight;
             }      
-            drawImageOnCanvas(backgroundImage, 0, 0, scaledWidth, scaledHeight);           
+            drawImageOnCanvas(backgroundImage, 0, 0, scaledWidth, scaledHeight);     console.log("owo");      
             for (const overlay of overlayImages) {    
                 //drawRotate(overlay);                              
                 const overlayWidth = overlay.image.width;
                 const overlayHeight = overlay.image.height;        
                 drawImageOnCanvas(overlay.image, overlay.x, overlay.y, overlayWidth, overlayHeight);                 
-            }      
-            saveState(); 
+            }                   
         }
-        function drawRotate(overlay){                
+        //歷史紀錄只有在繪圖的時候可以用
+        function displaySaveState (){
+            document.getElementById('undo').style.display='block';
+            document.getElementById('redo').style.display='block';
+        }
+        //歷史紀錄
+        function saveState() {
+            // 將當前繪圖狀態保存到歷史紀錄            
+            history = history.slice(0, historyPointer + 1);console.log("save_historyPointer="+historyPointer);
+            const currentState = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            history.push(currentState);
+            historyPointer = history.length - 1;
+            console.log("history.length="+history.length);console.log("historyPointer="+historyPointer);
+        }
+
+        function undo() {
+            console.log("historyPointer="+historyPointer);
+            if (historyPointer > 0) {
+                historyPointer--;
+                ctx.putImageData(history[historyPointer], 0, 0);console.log(history);
+            }
+        }
+
+        function redo() {
+            if (historyPointer < history.length - 1) {
+                historyPointer++;
+                ctx.putImageData(history[historyPointer], 0, 0);
+            }
+        }  
+        /*function drawRotate(overlay){                
                 // 將圖層的中心點設置為旋轉的軸心
                 // 設定旋轉中心為圖像的中心
                 const centerX = overlay.image.width / 2;
@@ -384,7 +405,7 @@
             isCropping = true;                 
         }
         // 繪製可調整的裁切框
-        function drawCropRect(cropX, cropY, cropWidth, cropHeight) {
+       /* function drawCropRect(cropX, cropY, cropWidth, cropHeight) {
             // 繪製遮罩
             ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
             ctx.fillRect(0, 0, backgroundImage.width, backgroundImage.height);       
@@ -455,10 +476,6 @@
             textCtx2.textAlign = "left";
             textCtx2.fillText(text, 1, 1);  
             textCtx2.closePath();
-            // 將 textCanvas 轉換成 Data URL
-            //const dataURL = textCanvas2.toDataURL();
-            //const textimage = new Image();
-            //textimage.src = dataURL;
             overlayImages.push({
                     number:j, 
                     image: textCanvas2, 
@@ -471,6 +488,10 @@
                  });
                 j++;             
             redrawCanvas();
+            // 將 textCanvas 轉換成 Data URL
+            //const dataURL = textCanvas2.toDataURL();
+            //const textimage = new Image();
+            //textimage.src = dataURL;
             
         };     
         function openModal() {
@@ -490,7 +511,8 @@
             textInput.value = '';
         }       
         function cancelText(){
-            isText = false;   ButtonActive();
+            isText = false;   
+            ButtonActive();
             document.getElementById('TextModal').style.display = 'none';
             textInput.value = '';
         }
@@ -520,14 +542,25 @@
                 isdrawLine = true;
                 isRectangle = false;
                 isText = false;   
-                ButtonActive();                
+                ButtonActive();   
+                document.getElementById('CheckModal').style.display = 'block';             
             } else{
                 openNoticeModal();
             }             
         }
+        function CheckModal(){
+            check = true;
+            document.getElementById('CheckModal').style.display = 'none'; 
+            isdrawLine = false;
+            isDrawingLine = false;
+            ctx.putImageData(history[historyPointer], 0, 0);
+            // 保存繪製的圖層
+            saveDrawingAsLayer();console.log(overlayImages); 
+            redrawCanvas();  
+            ButtonActive();                             
+        }                
         function drawLine(context, x1, y1, x2, y2) {
-            context.beginPath();
-            ctx.lineWidth = 10;    
+            context.beginPath();   
             context.strokeStyle = `${color}`;
             context.lineWidth = 1;
             context.moveTo(x1, y1);
@@ -535,6 +568,50 @@
             context.stroke();
             context.closePath();
         }
+        const tempCanvas = document.createElement('canvas');
+        tempCanvas.width = canvas.width;
+        tempCanvas.height = canvas.height;
+        const tempCtx = tempCanvas.getContext('2d');
+        function drawLineOnTempCanvas(startX, startY, endX, endY) {
+            tempCtx.beginPath();
+            tempCtx.strokeStyle = `${color}`;
+            tempCtx.lineWidth = 1;
+            tempCtx.moveTo(startX, startY);
+            tempCtx.lineTo(endX, endY);
+            tempCtx.stroke();
+            tempCtx.closePath();           
+        }
+        function saveDrawingAsLayer(x,y) {                 
+            const layerCanvas = document.createElement('canvas');
+            const layerCtx = layerCanvas.getContext('2d');           
+            // 計算邊界
+            let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+            for (let i = 0; i < points.length; i++) {
+                const point = points[i];
+                minX = Math.min(minX, point.x);
+                minY = Math.min(minY, point.y);
+                maxX = Math.max(maxX, point.x);
+                maxY = Math.max(maxY, point.y);
+            }
+            layerCanvas.width = maxX - minX;
+            layerCanvas.height = maxY - minY;
+            //只切有繪畫的部分複製過去新畫布
+            layerCtx.clearRect(0, 0, layerCtx.width, layerCtx.height);            
+            layerCtx.drawImage(tempCanvas, minX - 1, minY - 1, (maxX - minX) + 5, (maxY - minY) + 5, 1, 1,maxX - minX,maxY - minY);            
+            overlayImages.push({
+                number: j,
+                image: layerCanvas,
+                x: minX,
+                y: minY,
+                width: layerCanvas.width,
+                height: layerCanvas.height,
+                isPath: true,
+            });
+            j++;
+            // 清空臨時 Canvas 跟 points
+            tempCtx.clearRect(0, 0, tempCanvas.width, tempCanvas.height);
+            points.length = 0;   
+        }     
         //加上active
         function ButtonActive(){
             const isTextElement =document.querySelector('#drawTextButton svg');
@@ -552,8 +629,12 @@
             }
             if (isdrawLine){                
                 isdrawLineElement.classList.add("active");
+                document.getElementById('CheckModal').style.display = 'block'; 
+                displaySaveState();
             }else {
+                document.getElementById('CheckModal').style.display = 'none'; 
                 isdrawLineElement.classList.remove("active");
+                CheckModal();
             }
 
         }
@@ -599,7 +680,7 @@
             }else{
                 document.getElementById('addOverlayImage').style.display = 'none';
             }
-        }
+        }        
         //顏色
         function colorModal(){
             document.getElementById('colorModel').style.display = 'block';
@@ -611,31 +692,7 @@
                     color = computedStyle.backgroundColor; console.log(color);
                     document.getElementById('colorModel').style.display = 'none';                    
             });}
-        }        
-        //歷史紀錄
-        function saveState() {
-            // 將當前繪圖狀態保存到歷史紀錄            
-            history = history.slice(0, historyPointer + 1);console.log("save");
-            const currentState = ctx.getImageData(0, 0, canvas.width, canvas.height);
-            history.push(currentState); console.log(history);
-            historyPointer = history.length - 1;
-            console.log("history.length="+history.length);console.log("historyPointer="+historyPointer);
-        }
-
-        function undo() {
-            console.log("historyPointer="+historyPointer);
-            if (historyPointer > 0) {
-                historyPointer--;
-                ctx.putImageData(history[historyPointer], 0, 0);console.log(history);
-            }
-        }
-
-        function redo() {
-            if (historyPointer < history.length - 1) {
-                historyPointer++;
-                ctx.putImageData(history[historyPointer], 0, 0);
-            }
-        }  
+        }                
         function saveImage() {
             var dataURL = canvas.toDataURL('image/png');
             var link = document.createElement('a');
@@ -671,8 +728,15 @@
                 redrawCanvas();
             }
         }
-        function drawcheck(x,y){
-
+        function drawCheck(x, y){
+            ctx.beginPath();            
+            ctx.fillStyle = 'white';
+            ctx.fillRect(x, y, checkIconWidth, checkIconHeight);
+            ctx.strokeStyle = 'rgba(0,0,0,.2)'
+            ctx.lineWidth = 1;          
+            ctx.strokeRect(x, y, checkIconWidth, checkIconHeight)
+            //drawImageOnCanvas(deletIcon, x, y, checkIconWidth, checkIconHeight);
+            ctx.closePath();
         }
         /*--------------------------------------------------------------------------------------------------------------------------------------------------*/
         backgroundImage.onload = function () {            
@@ -681,11 +745,10 @@
             redrawCanvas(); 
             isImageLoaded = true; 
             addOverlayImage();
-            saveState();
         };
 
         overlayImage.onload = function () {
-            drawImageOnCanvas(overlayImage, 50, 50, overlayImage.width, overlayImage.height); 
+            drawImageOnCanvas(overlayImage, 50, 50, overlayImage.width, overlayImage.height);
         };
 
         document.getElementById('backgroundImage').addEventListener('change', function (e) {
@@ -727,6 +790,7 @@
         document.getElementById('drawRectangle').addEventListener('click',IsdrawRectangle);
         //繪圖
         document.getElementById('drawLine').addEventListener('click',IsdrawLine);
+        document.getElementById('Check').addEventListener('click',CheckModal);
         //關閉提醒框
         document.getElementById('closeNoticeModal').addEventListener('click',closeNoticeModal);
         //顏色選單
@@ -965,12 +1029,12 @@
                               </svg></label>
                         </div>
                         <div class="menu__item" style="padding: 10px;">
-                            <label id="undo"><svg xmlns="http://www.w3.org/2000/svg" width="25" height="25" fill="currentColor" class="bi bi-arrow-return-left" viewBox="0 0 16 16">
+                            <label id="undo" style="display: none;"><svg xmlns="http://www.w3.org/2000/svg" width="25" height="25" fill="currentColor" class="bi bi-arrow-return-left" viewBox="0 0 16 16">
                                 <path fill-rule="evenodd" d="M14.5 1.5a.5.5 0 0 1 .5.5v4.8a2.5 2.5 0 0 1-2.5 2.5H2.707l3.347 3.346a.5.5 0 0 1-.708.708l-4.2-4.2a.5.5 0 0 1 0-.708l4-4a.5.5 0 1 1 .708.708L2.707 8.3H12.5A1.5 1.5 0 0 0 14 6.8V2a.5.5 0 0 1 .5-.5"/>
                               </svg></label>
                         </div>
                         <div class="menu__item" style="padding: 10px;">
-                            <label id="redo"><svg xmlns="http://www.w3.org/2000/svg" width="25" height="25" fill="currentColor" class="bi bi-arrow-return-right" viewBox="0 0 16 16">
+                            <label id="redo" style="display: none;"><svg xmlns="http://www.w3.org/2000/svg" width="25" height="25" fill="currentColor" class="bi bi-arrow-return-right" viewBox="0 0 16 16">
                                 <path fill-rule="evenodd" d="M1.5 1.5A.5.5 0 0 0 1 2v4.8a2.5 2.5 0 0 0 2.5 2.5h9.793l-3.347 3.346a.5.5 0 0 0 .708.708l4.2-4.2a.5.5 0 0 0 0-.708l-4-4a.5.5 0 0 0-.708.708L13.293 8.3H3.5A1.5 1.5 0 0 1 2 6.8V2a.5.5 0 0 0-.5-.5"/>
                               </svg></label>
                         </div>
@@ -1021,7 +1085,33 @@
                     </div>
                     
                 </div>
-            </div>        
+            </div>      
+            <div style="width: 100%;position: relative;"><!--若未載入底圖跳出提醒-->
+                <div  id=""  style="position: fixed;top: 40% ;left: 40%; display: none;z-index: 1060; text-align: center;   ">
+                    <div style="position: relative;display: flex;flex-direction: column;width: 100%;pointer-events: auto;background-color: #fff;
+                    background-clip: padding-box;
+                    border: 1px solid rgba(0,0,0,.2);
+                    border-radius: 0.3rem;padding: 0.3rem;
+                    outline: 0;">
+                        <div style="padding: 0.3rem;"><label for="textInput">繪圖完成</label></div>
+                        <div><button id="">確定</button></div>
+                        <div><button id="">取消</button></div>
+                    </div>
+                    
+                </div>
+            </div>    
+            <div style="width: 100%;position: relative;"><!--若未載入底圖跳出提醒-->
+                <div  id="CheckModal"  style="position: fixed;top: 20% ;left: 80%; display: none;z-index: 1060; text-align: center;   ">
+                    <div style="position: relative;display: flex;flex-direction: column;width: 100%;pointer-events: auto;background-color: #fff;
+                    background-clip: padding-box;
+                    border: 1px solid rgba(0,0,0,.2);
+                    border-radius: 0.3rem;padding: 0rem;
+                    outline: 0;">
+                        <div><button id="Check"style="border:none; padding: 0.3rem 0.5rem;">繪圖完成 v </button></div>
+                    </div>
+                    
+                </div>
+            </div>   
             
             
             <!--插入游標圖案--不使用了
