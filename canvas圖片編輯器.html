@@ -12,14 +12,10 @@
         canvas.height = 500;//預設畫布
         DrawNoImage();
         // 提高讀取操作的效率
-        ctx.canvas.willReadFrequently = true;
-
+        ctx.canvas.willReadFrequently = true;        
+        
         let backgroundImage = new Image();
         let overlayImages = [];
-        const deletIcon = new Image();
-        deletIcon.src = 'cross-circle.png';
-        const zoomIcon = new Image();
-        zoomIcon.src = 'arrow-up-right-and-arrow-down-left-from-center.png';
 
         let isDragging = false;
         let isClick = false;
@@ -27,6 +23,8 @@
         let resizing = false;
         let rotationAngle = 0;
         let isImageLoaded = false;
+        let rotating = false;
+        const handleRadius = 30;  // 旋轉控制鈕的半徑
         addOverlayImage();
         
         let initialWidth, initialHeight;
@@ -54,14 +52,20 @@
         let drawLineEndX, drawLineEndY;
         let isDrawingLine = false;
         let check = false;
-        let checkIconWidth = 80;
-        let checkIconHeight = 30;
+        let checkDraw = false;
         let boundingBox;
         let i=0;
         const points = [];
+        let FinishYES = false;
         //歷史紀錄
         let history = [];
         let historyPointer = -1;
+        //拷貝繪圖的歷史紀錄
+        let tempHistory = [];
+        let tempHistoryPointer = -1;
+        //旋轉
+        let rotation = 0;
+        let startAngle = 0;
 
         //顏色
         let color ;
@@ -69,6 +73,7 @@
         function handleMouseDown(e) {
              mouseX = e.clientX - canvas.getBoundingClientRect().left;
              mouseY = e.clientY - canvas.getBoundingClientRect().top;
+             startAngle = rotation;
             //繪圖
             if(isdrawLine){
                 drawLineX = mouseX;
@@ -77,11 +82,10 @@
             }else if(isRectangle){//畫矩形框
                 rectangleStartX = mouseX;
                 rectangleStartY = mouseY;
-                isDrawingRectangle = true;
-                
+                isDrawingRectangle = true;                
             }else {
                 for (let i = overlayImages.length - 1; i >= 0; i--) {
-                    const overlay = overlayImages[i];console.log(overlayImages);                       
+                    const overlay = overlayImages[i];                     
                     //確定滑鼠在該圖檔上點擊
                     if (
                         mouseX >= overlay.x + deleteIconSize/2 &&
@@ -125,6 +129,19 @@
                     redrawCanvas();
                     break;
                     }
+                    //旋轉功能
+                    const rotateIconX = overlay.x + scaledWidth ;
+                    const rotateIconY = overlay.y ;
+                    if(
+                        mouseX >= rotateIconX - handleRadius/2  &&
+                        mouseX <= rotateIconX + handleRadius/2  &&
+                        mouseY >= rotateIconY - handleRadius/2  &&
+                        mouseY <= rotateIconY + handleRadius/2 
+                    ){
+                        rotating = true;
+                        selectedOverlayIndex = i;    console.log("旋轉");
+                        break;        
+                    }
                 }       
             } 
             //if(isImageLoaded){    
@@ -140,11 +157,14 @@
                 const scaledHeight = overlay.image.height;
                 initialWidth = overlay.image.width;
                 initialHeight = overlay.image.height;
-                drawScaleHandle(overlay.x + scaledWidth, overlay.y + scaledHeight);
-                drawDeleteIcon( overlay.x,overlay.y);                
+                if(!overlay.isPath){
+                    drawScaleHandle(overlay.x + scaledWidth, overlay.y + scaledHeight);
+                }
+                //drawRotateHandle(overlay.x + scaledWidth, overlay.y);
+                drawRotationSymbol(overlay.x + scaledWidth, overlay.y);
+                drawDeleteIcon(overlay.x,overlay.y);                
             }                        
-        }
-        
+        }        
         function handleMouseUp(e) {            
             isDragging = false;
             const mouseX = e.clientX - canvas.getBoundingClientRect().left;
@@ -154,7 +174,8 @@
             cropLeft = false;
             cropRight = false;
             cropTop = false;
-            cropDown = false;            
+            cropDown = false;   
+            rotating =false;         
             //畫矩形框
             if (isDrawingRectangle) {
                 isDrawingRectangle = false;
@@ -176,6 +197,7 @@
                     width:rectCanvas.width, 
                     height:rectCanvas.height,
                     isRectCanvas: true,
+                    rotation: 0,
                  });
                 j++;
                 isRectangle = false;
@@ -191,8 +213,7 @@
                 drawLineEndY = mouseY;
                 saveState();                                  
             }            
-        }
-        
+        }        
         function handleMouseMove(e) {                
             //移動功能
             if (isDragging && selectedOverlayIndex !== -1) {
@@ -234,6 +255,20 @@
                 drawLineX = mouseX;
                 drawLineY = mouseY;
                 points.push({ x: mouseX, y: mouseY });
+                checkDraw = true;
+            }
+            if(rotating && selectedOverlayIndex !== -1){
+                //旋轉功能
+                mouseX = e.clientX - canvas.getBoundingClientRect().left;
+                mouseY = e.clientY - canvas.getBoundingClientRect().top;
+                const overlay = overlayImages[selectedOverlayIndex]; console.log(selectedOverlayIndex);
+                const deltaX = mouseX - (overlay.x + (overlay.image.width/2));        
+                const deltaY = mouseY - (overlay.y + (overlay.image.height/2));                   
+                // 計算旋轉角度
+                const angle = (Math.atan2(deltaY, deltaX) * 180) / Math.PI; 
+                // 將旋轉角度應用到圖像
+                overlay.rotation = startAngle + (angle + 45);                  
+                redrawCanvas();
             }
             //縮放功能 
             if (resizing && selectedOverlayIndex !== -1) {
@@ -241,27 +276,27 @@
                 mouseY = e.clientY - canvas.getBoundingClientRect().top;
                 const overlay = overlayImages[selectedOverlayIndex];
                 const deltaX = mouseX - (overlay.x + overlay.image.width);
-                const deltaY = mouseY - (overlay.y + overlay.image.height);                
-                //const newWidth = initialWidth + deltaX;
-                //const newHeight = initialHeight + deltaY;
+             
+                const deltaY = mouseY - (overlay.y + overlay.image.height);                                
                 let newWidth, newHeight;
-                const aspectRatio = initialWidth / initialHeight;
-                newHeight = initialHeight + deltaY;
-                newWidth = newHeight * aspectRatio;//只能等比例放大縮小
-
-                //旋轉功能
-                // 計算用戶拖動的角度
-                //rotationAngle = Math.atan2(mouseX, mouseY);  //要以哪裡為中心點?
-
-                //因為一直無法解決[不可動到retcanvas長寬]的問題，所以用爆理解法刪除圖層重新推一個新的長寬上去
+                const minWidth = 20;  //最小允許縮放長寬
+                const minHeight = 20;
+                const aspectRatio = initialWidth / initialHeight; //只能等比例縮放
+                newHeight =initialHeight + deltaY;
+                if (newHeight < minHeight) {
+                    newHeight = minHeight;
+                    newWidth = newHeight * aspectRatio;
+                }else{
+                    newWidth = newHeight * aspectRatio; 
+                }                    
+                //因為一直無法解決[不可動到retcanvas長寬]的問題，所以用暴力解法刪除圖層重新推一個新的長寬上去
                 if(overlay.isRectCanvas && resizing){
-                    overlayImages.splice(selectedOverlayIndex, 1);
-                    const rectCanvas = document.createElement('canvas');
-                    if(newWidth > 50){
-                        rectCanvas.width = newWidth;
-                        rectCanvas.height = newHeight;
-                        const rectCtx = rectCanvas.getContext('2d');
-                        drawRectangle(rectCtx,0, 0, rectCanvas.width, rectCanvas.height);                
+                    overlayImages.splice(selectedOverlayIndex, 1); //刪除原本的
+                    const rectCanvas = document.createElement('canvas');           
+                    rectCanvas.width = newWidth;
+                    rectCanvas.height = newHeight;
+                    const rectCtx = rectCanvas.getContext('2d');
+                    drawRectangle(rectCtx,0, 0, rectCanvas.width, rectCanvas.height);                
                         overlayImages.push({
                             number:j, 
                             image: rectCanvas, 
@@ -270,14 +305,13 @@
                             width:rectCanvas.width, 
                             height:rectCanvas.height,
                             isRectCanvas: true,
+                            rotation: overlay.rotation,
                         });
-                        j++;
-                    }                    
+                        j++;                                     
                }else if(overlay.isText && resizing){ //文字功能
                     overlayImages.splice(selectedOverlayIndex, 1);
                     const textCanvas = document.createElement('canvas');
-                    if(newWidth > 50){
-                        textCanvas.width = newWidth;
+                    textCanvas.width = newWidth;
                         textCanvas.height = newHeight;
                         const textCtx = textCanvas.getContext('2d');
                         textCtx.beginPath();
@@ -296,97 +330,16 @@
                             height:textCanvas.height,
                             isText:true,
                             text:overlay.text,
+                            rotation: overlay.rotation,
                         });     
                         j++;
-                    }   
-               }else{
-                if(newWidth > 50){
-                    overlay.image.width = newWidth;
-                    overlay.image.height = newHeight;
-                }
-                }                            
+               }                     
                 redrawCanvas();
             }                       
         }        
         /*-----------------------------------------------------Function-----------------------------------------------------*/
-        //繪製圖像於畫布上
-        function drawImageOnCanvas(image, x, y, width, height) {
-            ctx.drawImage(image, x, y, width, height);
-        }
-        //清空畫布
-        function clearCanvas() {
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-        }
-        function redrawCanvas() {
-            clearCanvas();            
-            // 計算等比例缩放比例
-            const scale = canvas.width / backgroundImage.width;//Math.min(, canvas.height / backgroundImage.height)
-            const scaledWidth = backgroundImage.width * scale;
-            let scaledHeight = backgroundImage.height * scale;
-            if(scaledHeight > canvas.height){
-                canvas.height = scaledHeight;
-            }      
-            drawImageOnCanvas(backgroundImage, 0, 0, scaledWidth, scaledHeight);     console.log("owo");      
-            for (const overlay of overlayImages) {    
-                //drawRotate(overlay);                              
-                const overlayWidth = overlay.image.width;
-                const overlayHeight = overlay.image.height;        
-                drawImageOnCanvas(overlay.image, overlay.x, overlay.y, overlayWidth, overlayHeight);                 
-            }                   
-        }
-        //歷史紀錄只有在繪圖的時候可以用
-        function displaySaveState (){
-            document.getElementById('undo').style.display='block';
-            document.getElementById('redo').style.display='block';
-        }
-        //歷史紀錄
-        function saveState() {
-            // 將當前繪圖狀態保存到歷史紀錄            
-            history = history.slice(0, historyPointer + 1);console.log("save_historyPointer="+historyPointer);
-            const currentState = ctx.getImageData(0, 0, canvas.width, canvas.height);
-            history.push(currentState);
-            historyPointer = history.length - 1;
-            console.log("history.length="+history.length);console.log("historyPointer="+historyPointer);
-        }
-
-        function undo() {
-            console.log("historyPointer="+historyPointer);
-            if (historyPointer > 0) {
-                historyPointer--;
-                ctx.putImageData(history[historyPointer], 0, 0);console.log(history);
-            }
-        }
-
-        function redo() {
-            if (historyPointer < history.length - 1) {
-                historyPointer++;
-                ctx.putImageData(history[historyPointer], 0, 0);
-            }
-        }  
-        /*function drawRotate(overlay){                
-                // 將圖層的中心點設置為旋轉的軸心
-                // 設定旋轉中心為圖像的中心
-                const centerX = overlay.image.width / 2;
-                const centerY = overlay.image.height / 2;
-
-                ctx.translate(centerX, centerY);
-                ctx.rotate((Math.PI / 180) * rotationAngle);
-                ctx.clearRect(overlay.x,overlay.y,overlay.image.width, overlay.image.height);
-                // 計算旋轉後的圖像區域的邊界框
-                const rotatedBoundingBox = getRotatedBoundingBox(centerX, centerY, overlay.image.width, overlay.image.height, (Math.PI / 180) * 45);
-
-                // 計算新的寬度和高度
-                const rotatedWidth = rotatedBoundingBox.maxX - rotatedBoundingBox.minX;
-                const rotatedHeight = rotatedBoundingBox.maxY - rotatedBoundingBox.minY;     
-                overlay.image.width =  rotatedWidth;
-                overlay.image.height = rotatedHeight;
-                ctx.drawImage(overlay.image, 0, 0, overlay.image.width, overlay.image.height);
-                // 恢復坐標系統
-                ctx.rotate((Math.PI / 180) * -rotationAngle);
-                ctx.translate(-centerX, -centerY);  
-                
-        }
-        function getRotatedBoundingBox(centerX, centerY, width, height, angle) {
+           
+        /*function getRotatedBoundingBox(centerX, centerY, width, height, angle) {
             const radians = angle;
             const cos = Math.abs(Math.cos(radians));
             const sin = Math.abs(Math.sin(radians));
@@ -447,8 +400,7 @@
                 isText = true;   
                 isRectangle = false;
                 isdrawLine = false;                
-                ButtonActive();
-                openModal(); 
+                ButtonActive();                
             } else{
                 openNoticeModal();
             }            
@@ -479,20 +431,16 @@
             overlayImages.push({
                     number:j, 
                     image: textCanvas2, 
-                    x: x - canvas.getBoundingClientRect().left, 
-                    y: y - canvas.getBoundingClientRect().top, 
+                    x: x, 
+                    y: y, 
                     width:textCanvas2.width+1, 
                     height:textCanvas2.height+1,
                     isText:true,
                     text:text,
+                    rotation: 0,
                  });
                 j++;             
-            redrawCanvas();
-            // 將 textCanvas 轉換成 Data URL
-            //const dataURL = textCanvas2.toDataURL();
-            //const textimage = new Image();
-            //textimage.src = dataURL;
-            
+            redrawCanvas();            
         };     
         function openModal() {
             document.getElementById('TextModal').style.display = 'block';
@@ -501,11 +449,11 @@
             const textInput = document.getElementById('textInput');
             const text = textInput.value.trim();
             // 將文字繪製成圖層
-            drawText(text,canvas.width/2,canvas.height/2);
+            drawText(text,canvas.width/2,canvas.height/2);console.log(canvas.width);
             // 關閉模態對話框
             isText = false;   
             document.getElementById('TextModal').style.display = 'none';
-            //拿掉button active
+            // 拿掉button active
             ButtonActive();
             // 清空輸入框
             textInput.value = '';
@@ -535,6 +483,46 @@
             canvas.stroke();
             canvas.closePath();
         }
+        //歷史紀錄只有在繪圖的時候可以用
+        function displaySaveState (){
+            document.getElementById('undo').style.display='block';
+            document.getElementById('redo').style.display='block';
+        }
+        //歷史紀錄
+        function saveState() {
+            // 將當前繪圖狀態保存到歷史紀錄            
+            history = history.slice(0, historyPointer + 1);      
+            const currentState = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            history.push(currentState);
+            historyPointer = history.length - 1;            
+            //繪圖也拷貝一份歷史紀錄
+            tempHistory = tempHistory.slice(0, tempHistoryPointer + 1);
+            const currentState2 = tempCtx.getImageData(0, 0, tempCanvas.width, tempCanvas.height);
+            tempHistory.push(currentState2);
+            tempHistoryPointer = history.length - 1;
+        }
+        function undo() {
+            console.log("historyPointer="+historyPointer);
+            if (historyPointer > 0) {
+                historyPointer--;
+                ctx.putImageData(history[historyPointer], 0, 0);console.log(history);
+            }
+            //
+            if (tempHistoryPointer > 0) {
+                tempHistoryPointer--;
+                tempCtx.putImageData(tempHistory[tempHistoryPointer], 0, 0);
+            }
+        }
+        function redo() {
+            if (historyPointer < history.length - 1) {
+                historyPointer++;
+                ctx.putImageData(history[historyPointer], 0, 0);
+            }
+            if (tempHistoryPointer < tempHistory.length - 1) {
+                tempHistoryPointer++;
+                tempCtx.putImageData(tempHistory[tempHistoryPointer], 0, 0);
+            }
+        }  
         //繪圖
         function IsdrawLine(){
             if(isImageLoaded){
@@ -543,21 +531,28 @@
                 isRectangle = false;
                 isText = false;   
                 ButtonActive();   
-                document.getElementById('CheckModal').style.display = 'block';             
+                document.getElementById('CheckModal').style.display = 'block'; 
+                saveState();            
             } else{
                 openNoticeModal();
             }             
         }
         function CheckModal(){
             check = true;
+            if(checkDraw){
+                saveDrawingAsLayer();console.log("儲存圖層"); 
+            }   
             document.getElementById('CheckModal').style.display = 'none'; 
             isdrawLine = false;
             isDrawingLine = false;
-            ctx.putImageData(history[historyPointer], 0, 0);
+            checkDraw = false;
+            //ctx.putImageData(history[historyPointer], 0, 0);
             // 保存繪製的圖層
-            saveDrawingAsLayer();console.log(overlayImages); 
+            history.length = 0; //清空歷史紀錄
             redrawCanvas();  
-            ButtonActive();                             
+            ButtonActive(); 
+            document.getElementById('undo').style.display='none';
+            document.getElementById('redo').style.display='none';                            
         }                
         function drawLine(context, x1, y1, x2, y2) {
             context.beginPath();   
@@ -572,6 +567,8 @@
         tempCanvas.width = canvas.width;
         tempCanvas.height = canvas.height;
         const tempCtx = tempCanvas.getContext('2d');
+        tempCtx.canvas.willReadFrequently = true;
+
         function drawLineOnTempCanvas(startX, startY, endX, endY) {
             tempCtx.beginPath();
             tempCtx.strokeStyle = `${color}`;
@@ -597,7 +594,7 @@
             layerCanvas.height = maxY - minY;
             //只切有繪畫的部分複製過去新畫布
             layerCtx.clearRect(0, 0, layerCtx.width, layerCtx.height);            
-            layerCtx.drawImage(tempCanvas, minX - 1, minY - 1, (maxX - minX) + 5, (maxY - minY) + 5, 1, 1,maxX - minX,maxY - minY);            
+            layerCtx.drawImage(tempCanvas, minX - 1, minY - 1, (maxX - minX) + 5, (maxY - minY) + 5, 1, 1,maxX - minX,maxY - minY);       
             overlayImages.push({
                 number: j,
                 image: layerCanvas,
@@ -606,6 +603,7 @@
                 width: layerCanvas.width,
                 height: layerCanvas.height,
                 isPath: true,
+                rotation: 0,
             });
             j++;
             // 清空臨時 Canvas 跟 points
@@ -619,11 +617,23 @@
             const isdrawLineElement =document.querySelector('#drawLine svg');            
             if (isText){                
                 isTextElement.classList.add("active");
+                document.getElementById('colorModel').style.display = 'none'; console.log(checkDraw);
+                if(checkDraw){
+                    document.getElementById('drawFinish').style.display = 'block';                                        
+                }else{
+                    openModal(); 
+                }
             }else {
                 isTextElement.classList.remove("active");
+                document.getElementById('undo').style.display='none';
+                document.getElementById('redo').style.display='none';  
             }
             if (isRectangle){                
                 isRectangleElement.classList.add("active");
+                document.getElementById('colorModel').style.display = 'none'; 
+                if(checkDraw){
+                    document.getElementById('drawFinish').style.display = 'block';                                        
+                }
             }else {
                 isRectangleElement.classList.remove("active");
             }
@@ -634,9 +644,7 @@
             }else {
                 document.getElementById('CheckModal').style.display = 'none'; 
                 isdrawLineElement.classList.remove("active");
-                CheckModal();
             }
-
         }
         //初始圖片
         function DrawNoImage(){
@@ -667,12 +675,29 @@
             ctx.closePath();
         }
         //跳提醒框
-        function openNoticeModal() {
+        function openNoticeModal() {            
             document.getElementById('NoticeModal').style.display = 'block';
         }  
         function closeNoticeModal() {
             document.getElementById('NoticeModal').style.display = 'none';
         } 
+        function drawFinishYES(){
+            FinishYES = true;
+            document.getElementById('drawFinish').style.display = 'none';   
+            CheckModal();     
+            if(isText){
+                openModal(); console.log("owo");                        
+            }
+            ButtonActive();       
+        }
+        function drawFinishNO(){
+            document.getElementById('CheckModal').style.display = 'block';
+            document.getElementById('drawFinish').style.display = 'none';   
+            isText = false;
+            isRectangle = false;
+            isdrawLine = true;
+            ButtonActive();
+        }
         //插入圖層
         function addOverlayImage(){
             if (isImageLoaded){
@@ -681,9 +706,16 @@
                 document.getElementById('addOverlayImage').style.display = 'none';
             }
         }        
+        let k = 0;
         //顏色
-        function colorModal(){
-            document.getElementById('colorModel').style.display = 'block';
+        function colorModal(){            
+            k ++;
+            let remainder = k % 2;
+            if(remainder==0){
+                document.getElementById('colorModel').style.display = 'none';
+            }else{
+                document.getElementById('colorModel').style.display = 'block';
+            }        
             //顏色監聽
             const colorElements = document.getElementsByClassName("color");
             for (const el of colorElements) {
@@ -694,13 +726,54 @@
             });}
         }                
         function saveImage() {
-            var dataURL = canvas.toDataURL('image/png');
+            if(
+                isRectangle == false &&
+                isText == false &&
+                isdrawLine == false &&
+                isCrop == false
+            ){
+            var mergedCanvas = document.createElement('canvas');
+            mergedCanvas.width = canvas.width;
+            mergedCanvas.height = canvas.height;
+            var mergedCtx = mergedCanvas.getContext('2d');
+            // 將原始畫布上的內容繪製到合併畫布上
+            mergedCtx.drawImage(canvas, 0, 0);
+            var mergedDataUrl = mergedCanvas.toDataURL();
             var link = document.createElement('a');
-            link.href = dataURL;
+            link.href = mergedDataUrl;
             link.download = 'canvas_image.png';
             //開始下載
             link.click();
+            }                        
         }
+        //繪製圖像於畫布上
+        function drawImageOnCanvas(image, x, y, width, height) {
+            ctx.drawImage(image, x, y, width, height);
+        }
+        //清空畫布
+        function clearCanvas() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+        }
+        // 計算等比例缩放比例          
+        function redrawCanvas() {
+            clearCanvas();    
+            const scale = canvas.width / backgroundImage.width;//Math.min(, canvas.height / backgroundImage.height)
+            const scaledWidth = backgroundImage.width * scale;
+            let scaledHeight = backgroundImage.height * scale;
+            canvas.height = scaledHeight;                                 
+            drawImageOnCanvas(backgroundImage, 0, 0, scaledWidth, scaledHeight);  
+            for (const overlay of overlayImages) {    
+                //drawRotate(overlay);                              
+                const overlayWidth = overlay.image.width;
+                const overlayHeight = overlay.image.height;        
+                //drawImageOnCanvas(overlay.image, overlay.x, overlay.y, overlayWidth, overlayHeight); 
+                ctx.save();
+                ctx.translate(overlay.x + overlayWidth / 2, overlay.y + overlayHeight / 2);
+                ctx.rotate((overlay.rotation * Math.PI) / 180);  // 根據 rotation 進行旋轉
+                ctx.drawImage(overlay.image, -overlayWidth / 2, -overlayHeight / 2, overlayWidth, overlayHeight);
+                ctx.restore();   
+            }                   
+        }     
         /*---------------------------------------------------------------------------------------------------------------------*/                
         /*------------------------------------------------------功能圖示按鈕繪畫---------------------------------------------------------------------------*/        
         function drawScaleHandle(x, y) {
@@ -708,16 +781,78 @@
             ctx.arc(x, y, scaleHandleRadius, 0, Math.PI * 2);//arc(x, y, radius, startAngle, endAngle, anticlockwise) 
             ctx.fillStyle = 'white';
             ctx.fill();
-            drawImageOnCanvas(zoomIcon, x-(scaleHandleRadius/2), y-(scaleHandleRadius/2), scaleHandleRadius, scaleHandleRadius);
+            ctx.strokeStyle = 'black';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(x - scaleHandleRadius / 2, y - scaleHandleRadius / 2);
+            ctx.lineTo(x , y);
+            ctx.moveTo(x - scaleHandleRadius / 2, y - scaleHandleRadius / 2);
+            ctx.lineTo(x - scaleHandleRadius / 2, y - scaleHandleRadius / 4);
+            ctx.moveTo(x - scaleHandleRadius / 2, y - scaleHandleRadius / 2);
+            ctx.lineTo(x - scaleHandleRadius/ 4, y - scaleHandleRadius / 2);
+            //
+            ctx.moveTo(x + scaleHandleRadius / 2, y + scaleHandleRadius / 2);
+            ctx.lineTo(x , y);
+            ctx.moveTo(x + scaleHandleRadius / 2, y + scaleHandleRadius / 2);
+            ctx.lineTo(x + scaleHandleRadius / 2, y + scaleHandleRadius / 4);
+            ctx.moveTo(x + scaleHandleRadius / 2, y + scaleHandleRadius / 2);
+            ctx.lineTo(x + scaleHandleRadius/ 4, y + scaleHandleRadius / 2);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.strokeStyle = 'white';
+            ctx.lineWidth = 3;
+            ctx.moveTo(x + scaleHandleRadius/4, y - scaleHandleRadius/4);
+            ctx.lineTo(x - scaleHandleRadius/4, y + scaleHandleRadius/4);
+            ctx.stroke();
             ctx.closePath();
         }
-
+        function drawRotationSymbol(x, y) {
+            ctx.save();
+            //圓形底
+            ctx.beginPath();
+            ctx.arc(x, y, handleRadius/2, 0, Math.PI * 2);
+            ctx.fillStyle = '#fbbb3c';  // 可以自行設定顏色
+            ctx.fill();                        
+            // 繪製3/4圓形線
+            const radius = 7;
+            ctx.beginPath();
+            ctx.arc(x, y, radius, 0, Math.PI * 1.5);
+            ctx.strokeStyle = 'black';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+            // 繪製三角形
+            const triangleSize = 6;
+            const endX = x + Math.cos(Math.PI * 1.5) * radius;
+            const endY = y + Math.sin(Math.PI * 1.5) * radius;
+            ctx.beginPath();
+            ctx.moveTo(endX, endY);
+            ctx.lineTo(endX, endY - triangleSize);
+            ctx.lineTo(endX + triangleSize, endY );
+            ctx.lineTo(endX , endY + triangleSize);
+            ctx.lineTo(endX , endY);
+            ctx.closePath();
+            ctx.fillStyle = 'black';
+            ctx.fill();
+            // 恢復 Canvas 狀態
+            ctx.restore();
+        }
         function drawDeleteIcon(x, y) {
             ctx.beginPath();
             ctx.arc(x, y, deleteIconSize/2, 0, Math.PI * 2);
-            ctx.fillStyle = 'white';
+            ctx.fillStyle = 'black';
             ctx.fill();
-            drawImageOnCanvas(deletIcon, x-(deleteIconSize/2), y-(deleteIconSize/2), deleteIconSize, deleteIconSize);
+            // 'X'
+            ctx.strokeStyle = 'white';
+            ctx.lineWidth = 2.5;
+            ctx.beginPath();
+            ctx.moveTo(x - deleteIconSize / 4, y - deleteIconSize / 4);
+            ctx.lineTo(x + deleteIconSize / 4, y + deleteIconSize / 4);
+            ctx.stroke();
+            // 
+            ctx.beginPath();
+            ctx.moveTo(x + deleteIconSize / 4, y - deleteIconSize / 4);
+            ctx.lineTo(x - deleteIconSize / 4, y + deleteIconSize / 4);
+            ctx.stroke();
             ctx.closePath();
         }
 
@@ -728,16 +863,6 @@
                 redrawCanvas();
             }
         }
-        function drawCheck(x, y){
-            ctx.beginPath();            
-            ctx.fillStyle = 'white';
-            ctx.fillRect(x, y, checkIconWidth, checkIconHeight);
-            ctx.strokeStyle = 'rgba(0,0,0,.2)'
-            ctx.lineWidth = 1;          
-            ctx.strokeRect(x, y, checkIconWidth, checkIconHeight)
-            //drawImageOnCanvas(deletIcon, x, y, checkIconWidth, checkIconHeight);
-            ctx.closePath();
-        }
         /*--------------------------------------------------------------------------------------------------------------------------------------------------*/
         backgroundImage.onload = function () {            
             clearCanvas();          
@@ -745,6 +870,7 @@
             redrawCanvas(); 
             isImageLoaded = true; 
             addOverlayImage();
+            closeNoticeModal();
         };
 
         overlayImage.onload = function () {
@@ -791,6 +917,8 @@
         //繪圖
         document.getElementById('drawLine').addEventListener('click',IsdrawLine);
         document.getElementById('Check').addEventListener('click',CheckModal);
+        document.getElementById('drawFinishYES').addEventListener('click',drawFinishYES);
+        document.getElementById('drawFinishNO').addEventListener('click',drawFinishNO);
         //關閉提醒框
         document.getElementById('closeNoticeModal').addEventListener('click',closeNoticeModal);
         //顏色選單
@@ -798,6 +926,8 @@
         //歷史狀態
         document.getElementById('undo').addEventListener('click',undo);
         document.getElementById('redo').addEventListener('click',redo);
+        //存檔
+        document.getElementById('saveImage').addEventListener('click',saveImage);
 
         canvas.addEventListener('mousedown', handleMouseDown);
         canvas.addEventListener('mouseup', handleMouseUp);
@@ -909,7 +1039,7 @@
     #drawLine:hover::before{
         position: absolute;
         top: -15px;
-        left: -73px;
+        left: -48px;
         color: rgb(0, 0, 0);
         font-size: .8em;
         background: #ffffff;
@@ -918,6 +1048,22 @@
         border-radius: 5px;
         z-index: 99;
         content: '繪圖';
+    }
+    #addOverlayImage{
+        position:relative;
+    }
+    #addOverlayImage:hover::before{
+        position: absolute;
+        top: -4px;
+        left: -73px;
+        color: rgb(0, 0, 0);
+        font-size: .8em;
+        background: #ffffff;
+        border: 1px solid rgba(0,0,0,.2);
+        padding: 5px;
+        border-radius: 5px;
+        z-index: 99;
+        content: '插入圖層';
     }
     .active{
         color: #fbbb3c;
@@ -957,7 +1103,12 @@
         background-color: rgb(0, 17, 255);
         margin: 10px;
     }
-    
+    #Check{
+        border:none; padding: 0.3rem 0.5rem; background-color: #ffdfa0; border:1px solid #fbbb3c;
+    }
+    #Check:hover{
+        background-color: #FBBB3C;
+    }
     
     </style>
   </head>
@@ -974,10 +1125,10 @@
                 <div style="padding: 25px;width: 50%;display: flex; ">
                     <div >
 
-                        <label class="button"style="background-color:#fbbb3c;border: none; color: black;padding-block: 1px;
+                        <label class="button"style="background-color:#fbbb3c;border: none; color: black;padding-block: 8px;    font-size: 13px;
                         padding-inline: 6px; ">上傳底圖<input type="file" id="backgroundImage" accept="image/*"style="width:1px;height:1px;"></label>
     
-                        <button class="button"onclick="saveImage()" type="button" style="background-color: white; border:1px solid #fbbb3c;margin:0px 20px ;">完成輸出</button>
+                        <button id="saveImage" class="button" type="button" style="background-color: white; border:1px solid #fbbb3c;margin:0px 20px ;">完成輸出</button>
                          
                     </div>          
                 </div>                
@@ -1028,21 +1179,11 @@
                                 <path d="M14 1a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H2a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1h12zM2 0a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V2a2 2 0 0 0-2-2H2z"/>
                               </svg></label>
                         </div>
-                        <div class="menu__item" style="padding: 10px;">
-                            <label id="undo" style="display: none;"><svg xmlns="http://www.w3.org/2000/svg" width="25" height="25" fill="currentColor" class="bi bi-arrow-return-left" viewBox="0 0 16 16">
-                                <path fill-rule="evenodd" d="M14.5 1.5a.5.5 0 0 1 .5.5v4.8a2.5 2.5 0 0 1-2.5 2.5H2.707l3.347 3.346a.5.5 0 0 1-.708.708l-4.2-4.2a.5.5 0 0 1 0-.708l4-4a.5.5 0 1 1 .708.708L2.707 8.3H12.5A1.5 1.5 0 0 0 14 6.8V2a.5.5 0 0 1 .5-.5"/>
-                              </svg></label>
-                        </div>
-                        <div class="menu__item" style="padding: 10px;">
-                            <label id="redo" style="display: none;"><svg xmlns="http://www.w3.org/2000/svg" width="25" height="25" fill="currentColor" class="bi bi-arrow-return-right" viewBox="0 0 16 16">
-                                <path fill-rule="evenodd" d="M1.5 1.5A.5.5 0 0 0 1 2v4.8a2.5 2.5 0 0 0 2.5 2.5h9.793l-3.347 3.346a.5.5 0 0 0 .708.708l4.2-4.2a.5.5 0 0 0 0-.708l-4-4a.5.5 0 0 0-.708.708L13.293 8.3H3.5A1.5 1.5 0 0 1 2 6.8V2a.5.5 0 0 0-.5-.5"/>
-                              </svg></label>
-                        </div>
                         <div class="menu__item" style="padding: 10px; position: relative;">
                             <label id="color"><svg xmlns="http://www.w3.org/2000/svg" width="25" height="25" fill="currentColor" class="bi bi-palette-fill" viewBox="0 0 16 16">
                                 <path d="M12.433 10.07C14.133 10.585 16 11.15 16 8a8 8 0 1 0-8 8c1.996 0 1.826-1.504 1.649-3.08-.124-1.101-.252-2.237.351-2.92.465-.527 1.42-.237 2.433.07M8 5a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3m4.5 3a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3M5 6.5a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0m.5 6.5a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3"/>
                               </svg></label>
-                            <div id="colorModel" style="position:absolute;left: 1px;border: 1px solid rgba(0,0,0,.2);border-radius: 15px;top: 49px;display: none;">
+                            <div id="colorModel" style="position:absolute;left: -39px;border: 1px solid rgba(0,0,0,.2);border-radius: 15px;top: 8px;display: none;">
                                 <div style="padding: 1px;">
                                     <div id="redColor" class="color"></div>
                                     <div id="orangeColor" class="color"></div>
@@ -1052,6 +1193,16 @@
                                 </div>                                
                             </div>
                         </div>
+                        <div class="menu__item" style="padding: 10px;">
+                            <label id="undo" style="display: none;"><svg xmlns="http://www.w3.org/2000/svg" width="25" height="25" fill="currentColor" class="bi bi-arrow-return-left" viewBox="0 0 16 16">
+                                <path fill-rule="evenodd" d="M14.5 1.5a.5.5 0 0 1 .5.5v4.8a2.5 2.5 0 0 1-2.5 2.5H2.707l3.347 3.346a.5.5 0 0 1-.708.708l-4.2-4.2a.5.5 0 0 1 0-.708l4-4a.5.5 0 1 1 .708.708L2.707 8.3H12.5A1.5 1.5 0 0 0 14 6.8V2a.5.5 0 0 1 .5-.5"/>
+                              </svg></label>
+                        </div>
+                        <div class="menu__item" style="padding: 10px;">
+                            <label id="redo" style="display: none;"><svg xmlns="http://www.w3.org/2000/svg" width="25" height="25" fill="currentColor" class="bi bi-arrow-return-right" viewBox="0 0 16 16">
+                                <path fill-rule="evenodd" d="M1.5 1.5A.5.5 0 0 0 1 2v4.8a2.5 2.5 0 0 0 2.5 2.5h9.793l-3.347 3.346a.5.5 0 0 0 .708.708l4.2-4.2a.5.5 0 0 0 0-.708l-4-4a.5.5 0 0 0-.708.708L13.293 8.3H3.5A1.5 1.5 0 0 1 2 6.8V2a.5.5 0 0 0-.5-.5"/>
+                              </svg></label>
+                        </div>                        
                         <div class="menu__border"></div>                        
                     </div>
                 </div>
@@ -1067,8 +1218,10 @@
                     outline: 0;">
                         <div style="padding: 0.3rem;"><label for="textInput">請輸入文字：</label></div>
                         <div><input type="text" id="textInput"></div>
-                        <div><button id="addText">確定</button></div>
-                        <div><button id="cancelText">取消</button></div>
+                        <div style="padding: 0.3rem;">
+                            <div><button type="button" id="addText" style="width: 80%;border: 1px solid #bd7e0070;background-color: #FBBB3C;margin: 5px 0px;border-radius: 0.3rem;">確定</button></div>
+                            <div><button type="button" id="cancelText"style="width: 80%;border: 1px solid #FBBB3C;background-color: #ffffff;margin: 0px 0px;border-radius: 0.3rem;">取消</button></div>
+                        </div>                        
                     </div>
                     
                 </div>
@@ -1081,33 +1234,32 @@
                     border-radius: 0.3rem;padding: 0.3rem;
                     outline: 0;">
                         <div style="padding: 0.3rem;"><label for="textInput">請先加入底圖</label></div>
-                        <div><button id="closeNoticeModal">確定</button></div>
-                    </div>
-                    
+                        <div><button type="button" id="closeNoticeModal"style="width: 80%;border: 1px solid #bd7e0070;background-color: #FBBB3C;margin: 5px 0px;border-radius: 0.3rem;">確定</button></div>
+                    </div>                    
                 </div>
             </div>      
             <div style="width: 100%;position: relative;"><!--若未載入底圖跳出提醒-->
-                <div  id=""  style="position: fixed;top: 40% ;left: 40%; display: none;z-index: 1060; text-align: center;   ">
+                <div  id="drawFinish"  style="position: fixed;top: 40% ;left: 40%; display: none;z-index: 1060; text-align: center;   ">
                     <div style="position: relative;display: flex;flex-direction: column;width: 100%;pointer-events: auto;background-color: #fff;
                     background-clip: padding-box;
                     border: 1px solid rgba(0,0,0,.2);
                     border-radius: 0.3rem;padding: 0.3rem;
                     outline: 0;">
-                        <div style="padding: 0.3rem;"><label for="textInput">繪圖完成</label></div>
-                        <div><button id="">確定</button></div>
-                        <div><button id="">取消</button></div>
+                        <div style="padding: 0.3rem;"><label for="textInput">請問繪圖是否完成?</label></div>
+                        <div><button type="button" id="drawFinishYES"style="width: 80%;border: 1px solid #bd7e0070;background-color: #FBBB3C;margin: 5px 0px;border-radius: 0.3rem;">是,完成繪圖</button></div>
+                        <div><button type="button" id="drawFinishNO"style="width: 80%;border: 1px solid #FBBB3C;background-color: #ffffff;margin: 0px 0px;border-radius: 0.3rem;">否,繼續繪圖</button></div>
                     </div>
                     
                 </div>
             </div>    
             <div style="width: 100%;position: relative;"><!--若未載入底圖跳出提醒-->
-                <div  id="CheckModal"  style="position: fixed;top: 20% ;left: 80%; display: none;z-index: 1060; text-align: center;   ">
+                <div  id="CheckModal"  style="position: fixed;top: 20% ;left: 50%; display: none;z-index: 1060; text-align: center;   ">
                     <div style="position: relative;display: flex;flex-direction: column;width: 100%;pointer-events: auto;background-color: #fff;
                     background-clip: padding-box;
                     border: 1px solid rgba(0,0,0,.2);
                     border-radius: 0.3rem;padding: 0rem;
                     outline: 0;">
-                        <div><button id="Check"style="border:none; padding: 0.3rem 0.5rem;">繪圖完成 v </button></div>
+                        <div><button type="button" id="Check">繪圖完成 v </button></div>
                     </div>
                     
                 </div>
