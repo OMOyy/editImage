@@ -25,6 +25,9 @@
         let isImageLoaded = false;
         let rotating = false;
         const handleRadius = 30;  // 旋轉控制鈕的半徑
+        let rotateX, rotateY;
+        let rotatedWidth = [];
+        let roratedHeight = [];
         addOverlayImage();
         
         let initialWidth, initialHeight;
@@ -64,7 +67,6 @@
         let tempHistory = [];
         let tempHistoryPointer = -1;
         //旋轉
-        let rotation = 0;
         let startAngle = 0;
 
         //顏色
@@ -72,8 +74,7 @@
 
         function handleMouseDown(e) {
              mouseX = e.clientX - canvas.getBoundingClientRect().left;
-             mouseY = e.clientY - canvas.getBoundingClientRect().top;
-             startAngle = rotation;
+             mouseY = e.clientY - canvas.getBoundingClientRect().top;                                      
             //繪圖
             if(isdrawLine){
                 drawLineX = mouseX;
@@ -99,25 +100,30 @@
                         overlayImages.push(overlayImages.splice(i, 1)[0]);
                         isClick = true;//縮放功能 - 邊框
                         break;
-                    }
-                    //縮放功能
-                    const scaledWidth = overlay.image.width; //這邊的寬度錯誤了
-                    const scaledHeight = overlay.image.height;
-                    const scaleHandleX = overlay.x + scaledWidth;
-                    const scaleHandleY = overlay.y + scaledHeight;
+                    }                     
+                    //縮放功能    
+                    //因為載入的圖層沒有預設 rotation = 0 所以計算不出選取框長寬        
+                    if(overlay.rotation == undefined){
+                        overlay.rotation = 0;
+                    }                
+                    const angleInRadians = ((overlay.rotation) * Math.PI) / 180;                   
+                    rotatedWidth[selectedOverlayIndex] = Math.abs(overlay.image.width * Math.cos(angleInRadians)) + Math.abs(overlay.image.height * Math.sin(angleInRadians));
+                    roratedHeight[selectedOverlayIndex] = Math.abs(overlay.image.width * Math.sin(angleInRadians)) + Math.abs(overlay.image.height * Math.cos(angleInRadians));                            
+                    const scaleHandleX = rotateX + rotatedWidth[selectedOverlayIndex];
+                    const scaleHandleY = rotateY + roratedHeight[selectedOverlayIndex];            
                     if (
                         mouseX >= scaleHandleX - scaleHandleRadius &&
                         mouseX <= scaleHandleX + scaleHandleRadius &&
                         mouseY >= scaleHandleY - scaleHandleRadius &&
                         mouseY <= scaleHandleY + scaleHandleRadius
                     ) {
-                        resizing = true; console.log("縮放");
+                        resizing = true; 
                         selectedOverlayIndex = i;                        
                         break;
                     }
                     //刪除功能
-                    const deleteIconX = overlay.x;
-                    const deleteIconY = overlay.y;   
+                    const deleteIconX = rotateX;
+                    const deleteIconY = rotateY;   
                     let rotateIconX;                 
                     if (
                         mouseX >= deleteIconX - deleteIconSize/2  &&
@@ -131,59 +137,54 @@
                     break;
                     }
                     //旋轉功能
-                    const angleInRadians = (overlay.rotation * Math.PI) / 180;console.log("旋轉角度"+overlay.rotation);             
-                    let rotatedWidth = Math.abs(overlay.image.width * Math.cos(angleInRadians)) + Math.abs(overlay.image.height * Math.sin(angleInRadians));console.log("rotatedWidth ="+rotatedWidth); 
-                        if (rotatedWidth){
-                            rotateIconX = overlay.x + rotatedWidth ;
-                        }else{
-                            rotateIconX = overlay.x + overlay.image.width;                          
-                        }   
-                    const rotateIconY = overlay.y ;
+                    startAngle = overlay.rotation;  
+                    rotateIconX = rotateX + rotatedWidth[selectedOverlayIndex] ;                     
+                    const rotateIconY = rotateY ;
                     if(
                         mouseX >= rotateIconX - handleRadius/2  &&
                         mouseX <= rotateIconX + handleRadius/2  &&
                         mouseY >= rotateIconY - handleRadius/2  &&
                         mouseY <= rotateIconY + handleRadius/2 
                     ){
-                        rotating = true; console.log("點擊旋轉");
+                        rotating = true; 
                         selectedOverlayIndex = i; 
                         isClick = false;   
                         break;        
                     }
-                }       
-            } 
-            //if(isImageLoaded){    
-            //redrawCanvas();}
-            
-            //點擊後繪製 邊框、縮放按鈕、刪除按鈕
-            if (isClick && selectedOverlayIndex !== -1){                                 
-                ctx.strokeStyle = 'black';
-                ctx.lineWidth = 2;
-                const overlay = overlayImages[selectedOverlayIndex];
-                let rotatedWidth = overlay.image.width ;
-                let roratedHeight = overlay.image.height ;
-                const angleInRadians = (overlay.rotation * Math.PI) / 180; console.log(overlay.rotation);
-                if(typeof overlay.rotation !== 'undefined'){
-                    rotatedWidth = Math.abs(rotatedWidth * Math.cos(angleInRadians)) + Math.abs(roratedHeight * Math.sin(angleInRadians));
-                    roratedHeight = Math.abs(rotatedWidth * Math.sin(angleInRadians)) + Math.abs(roratedHeight * Math.cos(angleInRadians));
-                    overlay.x = overlay.x - (rotatedWidth - overlay.image.width)/2;
-                    overlay.y = overlay.y - (roratedHeight - overlay.image.height)/2;console.log("rotation!=0");
-                    ctx.strokeRect(overlay.x, overlay.y, rotatedWidth, roratedHeight); 
-                }else{
-                    ctx.strokeRect(overlay.x, overlay.y, overlay.image.width, overlay.image.height); 
-                }                                   
-                     console.log("選取框的icon位置"+overlay.x +rotatedWidth);                          
-                const scaledWidth = rotatedWidth;
-                const scaledHeight = roratedHeight;
-                initialWidth = overlay.image.width;
-                initialHeight = overlay.image.height;
-                if(!overlay.isPath){
-                    drawScaleHandle(overlay.x + scaledWidth, overlay.y + scaledHeight);
-                }
-                //drawRotateHandle(overlay.x + scaledWidth, overlay.y);
-                drawRotationSymbol(overlay.x + scaledWidth, overlay.y);
-                drawDeleteIcon(overlay.x,overlay.y);                                
-            }                        
+                } 
+                //點擊後繪製 邊框、縮放按鈕、刪除按鈕
+                if (isClick && selectedOverlayIndex !== -1){                                 
+                        ctx.strokeStyle = 'black';
+                        ctx.lineWidth = 2;
+                        const overlay = overlayImages[selectedOverlayIndex];
+                        rotatedWidth[selectedOverlayIndex] = overlay.image.width ;
+                        roratedHeight[selectedOverlayIndex] = overlay.image.height ;
+                        const angleInRadians = ((overlay.rotation ) * Math.PI) / 180;      
+                        if(typeof overlay.rotation !== 'undefined'){    
+                            rotatedWidth[selectedOverlayIndex] = Math.abs(overlay.image.width * Math.cos(angleInRadians)) + Math.abs(overlay.image.height * Math.sin(angleInRadians));
+                            roratedHeight[selectedOverlayIndex] = Math.abs(overlay.image.width * Math.sin(angleInRadians)) + Math.abs(overlay.image.height* Math.cos(angleInRadians));                           
+                            rotateX = overlay.x - (rotatedWidth[selectedOverlayIndex] - overlay.image.width)/2;
+                            rotateY = overlay.y - (roratedHeight[selectedOverlayIndex] - overlay.image.height)/2;
+                            ctx.strokeRect(rotateX, rotateY, rotatedWidth[selectedOverlayIndex], roratedHeight[selectedOverlayIndex]);  
+                            drawRotationSymbol(rotateX + rotatedWidth[selectedOverlayIndex], rotateY);
+                            drawDeleteIcon(rotateX,rotateY);  
+                            if(!overlay.isPath){
+                                drawScaleHandle(rotateX + rotatedWidth[selectedOverlayIndex], rotateY + roratedHeight[selectedOverlayIndex]);
+                            }
+                        }else{
+                            rotateX = overlay.x;
+                            rotateY = overlay.y;
+                            ctx.strokeRect(overlay.x, overlay.y, overlay.image.width, overlay.image.height); 
+                            drawRotationSymbol(overlay.x + overlay.image.width, overlay.y);
+                            drawDeleteIcon(overlay.x,overlay.y);   
+                            if(!overlay.isPath){
+                                drawScaleHandle(overlay.x + overlay.image.width, overlay.y + overlay.image.height);
+                            }
+                        }                                                          
+                        initialWidth = overlay.image.width;
+                        initialHeight = overlay.image.height;    
+                    }            
+            }                         
         }        
         function handleMouseUp(e) {            
             isDragging = false;
@@ -282,12 +283,12 @@
                 mouseX = e.clientX - canvas.getBoundingClientRect().left;
                 mouseY = e.clientY - canvas.getBoundingClientRect().top;
                 const overlay = overlayImages[selectedOverlayIndex]; console.log(selectedOverlayIndex);
-                const deltaX = mouseX - (overlay.x + (overlay.image.width/2));        
-                const deltaY = mouseY - (overlay.y + (overlay.image.height/2));                   
+                const deltaX = mouseX - (rotateX + (rotatedWidth[selectedOverlayIndex]/2));        
+                const deltaY = mouseY - (rotateY + (roratedHeight[selectedOverlayIndex]/2));                   
                 // 計算旋轉角度
                 const angle = (Math.atan2(deltaY, deltaX) * 180) / Math.PI; 
                 // 將旋轉角度應用到圖像
-                overlay.rotation = startAngle + (angle + 45);      console.log("旋轉角度"+overlay.rotation);                                      
+                overlay.rotation = startAngle + (angle + 45);                                     
                 redrawCanvas();
             }
             //縮放功能 
@@ -295,8 +296,8 @@
                 mouseX = e.clientX - canvas.getBoundingClientRect().left;
                 mouseY = e.clientY - canvas.getBoundingClientRect().top;
                 const overlay = overlayImages[selectedOverlayIndex];
-                const deltaX = mouseX - (overlay.x + overlay.image.width); 
-                const deltaY = mouseY - (overlay.y + overlay.image.height);                                
+                const deltaX = mouseX - (rotateX + rotatedWidth[selectedOverlayIndex]); 
+                const deltaY = mouseY - (rotateY + roratedHeight[selectedOverlayIndex]);                                                
                 let newWidth, newHeight;
                 const minWidth = 20;  //最小允許縮放長寬
                 const minHeight = 20;
@@ -470,7 +471,7 @@
             const textInput = document.getElementById('textInput');
             const text = textInput.value.trim();
             // 將文字繪製成圖層
-            drawText(text,canvas.width/2,canvas.height/2);console.log(canvas.width);
+            drawText(text,canvas.width/2,canvas.height/2);
             // 關閉模態對話框
             isText = false;   
             document.getElementById('TextModal').style.display = 'none';
@@ -526,7 +527,7 @@
             console.log("historyPointer="+historyPointer);
             if (historyPointer > 0) {
                 historyPointer--;
-                ctx.putImageData(history[historyPointer], 0, 0);console.log(history);
+                ctx.putImageData(history[historyPointer], 0, 0);
             }
             //
             if (tempHistoryPointer > 0) {
@@ -561,7 +562,7 @@
         function CheckModal(){
             check = true;
             if(checkDraw){
-                saveDrawingAsLayer();console.log("儲存圖層"); 
+                saveDrawingAsLayer();
             }   
             document.getElementById('CheckModal').style.display = 'none'; 
             isdrawLine = false;
@@ -638,7 +639,7 @@
             const isdrawLineElement =document.querySelector('#drawLine svg');            
             if (isText){                
                 isTextElement.classList.add("active");
-                document.getElementById('colorModel').style.display = 'none'; console.log(checkDraw);
+                document.getElementById('colorModel').style.display = 'none';
                 if(checkDraw){
                     document.getElementById('drawFinish').style.display = 'block';                                        
                 }else{
@@ -707,7 +708,7 @@
             document.getElementById('drawFinish').style.display = 'none';   
             CheckModal();     
             if(isText){
-                openModal(); console.log("owo");                        
+                openModal();             
             }
             ButtonActive();       
         }
@@ -785,15 +786,14 @@
             drawImageOnCanvas(backgroundImage, 0, 0, scaledWidth, scaledHeight);  
             for (const overlay of overlayImages) {    
                 //drawRotate(overlay);                              
-                const overlayWidth = overlay.image.width; console.log(overlayWidth);
+                const overlayWidth = overlay.image.width; 
                 const overlayHeight = overlay.image.height;        
                 //drawImageOnCanvas(overlay.image, overlay.x, overlay.y, overlayWidth, overlayHeight); 
                 ctx.save();
                 ctx.translate(overlay.x + overlayWidth / 2, overlay.y + overlayHeight / 2); 
-                ctx.rotate((overlay.rotation * Math.PI) / 180);  console.log("重新繪製"+overlay.rotation);
+                ctx.rotate((overlay.rotation * Math.PI) / 180); 
                 ctx.drawImage(overlay.image, -overlayWidth / 2, -overlayHeight / 2, overlayWidth, overlayHeight);
-                ctx.restore();      
-                console.log(overlay);             
+                ctx.restore();                     
             }                   
         }     
         /*---------------------------------------------------------------------------------------------------------------------*/                
