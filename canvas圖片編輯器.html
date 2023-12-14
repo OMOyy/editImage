@@ -89,7 +89,7 @@
                     //確定滑鼠在該圖檔上點擊
                     if (
                         mouseX >= overlay.x + deleteIconSize/2 &&
-                        mouseX <= overlay.x + overlay.image.width - scaleHandleRadius &&
+                        mouseX <= overlay.x + overlay.image.width - scaleHandleRadius  &&
                         mouseY >= overlay.y  &&
                         mouseY <= overlay.y + overlay.image.height
                     ) {
@@ -101,7 +101,7 @@
                         break;
                     }
                     //縮放功能
-                    const scaledWidth = overlay.image.width;
+                    const scaledWidth = overlay.image.width; //這邊的寬度錯誤了
                     const scaledHeight = overlay.image.height;
                     const scaleHandleX = overlay.x + scaledWidth;
                     const scaleHandleY = overlay.y + scaledHeight;
@@ -111,13 +111,14 @@
                         mouseY >= scaleHandleY - scaleHandleRadius &&
                         mouseY <= scaleHandleY + scaleHandleRadius
                     ) {
-                        resizing = true;
+                        resizing = true; console.log("縮放");
                         selectedOverlayIndex = i;                        
                         break;
                     }
                     //刪除功能
                     const deleteIconX = overlay.x;
-                    const deleteIconY = overlay.y;
+                    const deleteIconY = overlay.y;   
+                    let rotateIconX;                 
                     if (
                         mouseX >= deleteIconX - deleteIconSize/2  &&
                         mouseX <= deleteIconX + deleteIconSize/2  &&
@@ -130,7 +131,13 @@
                     break;
                     }
                     //旋轉功能
-                    const rotateIconX = overlay.x + scaledWidth ;
+                    const angleInRadians = (overlay.rotation * Math.PI) / 180;console.log("旋轉角度"+overlay.rotation);             
+                    let rotatedWidth = Math.abs(overlay.image.width * Math.cos(angleInRadians)) + Math.abs(overlay.image.height * Math.sin(angleInRadians));console.log("rotatedWidth ="+rotatedWidth); 
+                        if (rotatedWidth){
+                            rotateIconX = overlay.x + rotatedWidth ;
+                        }else{
+                            rotateIconX = overlay.x + overlay.image.width;                          
+                        }   
                     const rotateIconY = overlay.y ;
                     if(
                         mouseX >= rotateIconX - handleRadius/2  &&
@@ -138,8 +145,9 @@
                         mouseY >= rotateIconY - handleRadius/2  &&
                         mouseY <= rotateIconY + handleRadius/2 
                     ){
-                        rotating = true;
-                        selectedOverlayIndex = i;    console.log("旋轉");
+                        rotating = true; console.log("點擊旋轉");
+                        selectedOverlayIndex = i; 
+                        isClick = false;   
                         break;        
                     }
                 }       
@@ -148,13 +156,25 @@
             //redrawCanvas();}
             
             //點擊後繪製 邊框、縮放按鈕、刪除按鈕
-            if (isClick && selectedOverlayIndex !== -1){                 
-                const overlay = overlayImages[selectedOverlayIndex];
+            if (isClick && selectedOverlayIndex !== -1){                                 
                 ctx.strokeStyle = 'black';
                 ctx.lineWidth = 2;
-                ctx.strokeRect(overlay.x, overlay.y, overlay.image.width, overlay.image.height);
-                const scaledWidth = overlay.image.width;
-                const scaledHeight = overlay.image.height;
+                const overlay = overlayImages[selectedOverlayIndex];
+                let rotatedWidth = overlay.image.width ;
+                let roratedHeight = overlay.image.height ;
+                const angleInRadians = (overlay.rotation * Math.PI) / 180; console.log(overlay.rotation);
+                if(typeof overlay.rotation !== 'undefined'){
+                    rotatedWidth = Math.abs(rotatedWidth * Math.cos(angleInRadians)) + Math.abs(roratedHeight * Math.sin(angleInRadians));
+                    roratedHeight = Math.abs(rotatedWidth * Math.sin(angleInRadians)) + Math.abs(roratedHeight * Math.cos(angleInRadians));
+                    overlay.x = overlay.x - (rotatedWidth - overlay.image.width)/2;
+                    overlay.y = overlay.y - (roratedHeight - overlay.image.height)/2;console.log("rotation!=0");
+                    ctx.strokeRect(overlay.x, overlay.y, rotatedWidth, roratedHeight); 
+                }else{
+                    ctx.strokeRect(overlay.x, overlay.y, overlay.image.width, overlay.image.height); 
+                }                                   
+                     console.log("選取框的icon位置"+overlay.x +rotatedWidth);                          
+                const scaledWidth = rotatedWidth;
+                const scaledHeight = roratedHeight;
                 initialWidth = overlay.image.width;
                 initialHeight = overlay.image.height;
                 if(!overlay.isPath){
@@ -162,7 +182,7 @@
                 }
                 //drawRotateHandle(overlay.x + scaledWidth, overlay.y);
                 drawRotationSymbol(overlay.x + scaledWidth, overlay.y);
-                drawDeleteIcon(overlay.x,overlay.y);                
+                drawDeleteIcon(overlay.x,overlay.y);                                
             }                        
         }        
         function handleMouseUp(e) {            
@@ -267,7 +287,7 @@
                 // 計算旋轉角度
                 const angle = (Math.atan2(deltaY, deltaX) * 180) / Math.PI; 
                 // 將旋轉角度應用到圖像
-                overlay.rotation = startAngle + (angle + 45);                  
+                overlay.rotation = startAngle + (angle + 45);      console.log("旋轉角度"+overlay.rotation);                                      
                 redrawCanvas();
             }
             //縮放功能 
@@ -275,8 +295,7 @@
                 mouseX = e.clientX - canvas.getBoundingClientRect().left;
                 mouseY = e.clientY - canvas.getBoundingClientRect().top;
                 const overlay = overlayImages[selectedOverlayIndex];
-                const deltaX = mouseX - (overlay.x + overlay.image.width);
-             
+                const deltaX = mouseX - (overlay.x + overlay.image.width); 
                 const deltaY = mouseY - (overlay.y + overlay.image.height);                                
                 let newWidth, newHeight;
                 const minWidth = 20;  //最小允許縮放長寬
@@ -288,7 +307,9 @@
                     newWidth = newHeight * aspectRatio;
                 }else{
                     newWidth = newHeight * aspectRatio; 
-                }                    
+                }    
+                overlay.image.width =  newWidth;
+                overlay.image.height = newHeight;
                 //因為一直無法解決[不可動到retcanvas長寬]的問題，所以用暴力解法刪除圖層重新推一個新的長寬上去
                 if(overlay.isRectCanvas && resizing){
                     overlayImages.splice(selectedOverlayIndex, 1); //刪除原本的
@@ -764,14 +785,15 @@
             drawImageOnCanvas(backgroundImage, 0, 0, scaledWidth, scaledHeight);  
             for (const overlay of overlayImages) {    
                 //drawRotate(overlay);                              
-                const overlayWidth = overlay.image.width;
+                const overlayWidth = overlay.image.width; console.log(overlayWidth);
                 const overlayHeight = overlay.image.height;        
                 //drawImageOnCanvas(overlay.image, overlay.x, overlay.y, overlayWidth, overlayHeight); 
                 ctx.save();
-                ctx.translate(overlay.x + overlayWidth / 2, overlay.y + overlayHeight / 2);
-                ctx.rotate((overlay.rotation * Math.PI) / 180);  // 根據 rotation 進行旋轉
+                ctx.translate(overlay.x + overlayWidth / 2, overlay.y + overlayHeight / 2); 
+                ctx.rotate((overlay.rotation * Math.PI) / 180);  console.log("重新繪製"+overlay.rotation);
                 ctx.drawImage(overlay.image, -overlayWidth / 2, -overlayHeight / 2, overlayWidth, overlayHeight);
-                ctx.restore();   
+                ctx.restore();      
+                console.log(overlay);             
             }                   
         }     
         /*---------------------------------------------------------------------------------------------------------------------*/                
