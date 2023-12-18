@@ -16,6 +16,7 @@
         
         let backgroundImage = new Image();
         let overlayImages = [];
+        let isaddOverlay = false;
 
         let isDragging = false;
         let isClick = false;
@@ -44,7 +45,6 @@
         let cropLeft, cropTop, cropDown, cropRight;        
         let cropRect = { x: 100, y: 100, width: 200, height: 150 }; 
         let cropX, cropY, cropWidth, cropHeight;   
-
         //文字編輯        
         let isText = false;
         let isDrawing = false;
@@ -68,7 +68,6 @@
         let tempHistoryPointer = -1;
         //旋轉
         let startAngle = 0;
-
         //顏色
         let color ;
 
@@ -100,9 +99,11 @@
                         overlayImages.push(overlayImages.splice(i, 1)[0]);
                         isClick = true;//縮放功能 - 邊框
                         break;
+                    }else{
+                        redrawCanvas();
                     }                     
                     //縮放功能    
-                    //因為載入的圖層沒有預設 rotation = 0 所以計算不出選取框長寬        
+                    //因為載入的圖層沒有預設 rotation = 0 會計算不出選取框長寬, 給他一個預設      
                     if(overlay.rotation == undefined){
                         overlay.rotation = 0;
                     }                
@@ -152,6 +153,9 @@
                         break;        
                     }
                 } 
+                if(isImageLoaded){
+                    redrawCanvas();
+                }  
                 //點擊後繪製 邊框、縮放按鈕、刪除按鈕
                 if (isClick && selectedOverlayIndex !== -1){                                 
                         ctx.strokeStyle = 'black';
@@ -282,7 +286,7 @@
                 //旋轉功能
                 mouseX = e.clientX - canvas.getBoundingClientRect().left;
                 mouseY = e.clientY - canvas.getBoundingClientRect().top;
-                const overlay = overlayImages[selectedOverlayIndex]; console.log(selectedOverlayIndex);
+                const overlay = overlayImages[selectedOverlayIndex];
                 const deltaX = mouseX - (rotateX + (rotatedWidth[selectedOverlayIndex]/2));        
                 const deltaY = mouseY - (rotateY + (roratedHeight[selectedOverlayIndex]/2));                   
                 // 計算旋轉角度
@@ -361,21 +365,7 @@
         }        
         /*-----------------------------------------------------Function-----------------------------------------------------*/
            
-        /*function getRotatedBoundingBox(centerX, centerY, width, height, angle) {
-            const radians = angle;
-            const cos = Math.abs(Math.cos(radians));
-            const sin = Math.abs(Math.sin(radians));
-
-            const newWidth = width * cos + height * sin;
-            const newHeight = width * sin + height * cos;
-
-            const minX = centerX - newWidth / 2;
-            const minY = centerY - newHeight / 2;
-            const maxX = centerX + newWidth / 2;
-            const maxY = centerY + newHeight / 2;
-
-            return { minX, minY, maxX, maxY };
-        }
+       /*
         function cropImage(){
             isCropping = true;                 
         }
@@ -513,23 +503,23 @@
         //歷史紀錄
         function saveState() {
             // 將當前繪圖狀態保存到歷史紀錄            
-            history = history.slice(0, historyPointer + 1);      
+            history = history.slice(0, historyPointer + 1); 
+            canvas.getContext('2d').willReadFrequently = true;  
             const currentState = ctx.getImageData(0, 0, canvas.width, canvas.height);
             history.push(currentState);
             historyPointer = history.length - 1;            
             //繪圖也拷貝一份歷史紀錄
             tempHistory = tempHistory.slice(0, tempHistoryPointer + 1);
+            tempCanvas.getContext('2d').willReadFrequently = true;
             const currentState2 = tempCtx.getImageData(0, 0, tempCanvas.width, tempCanvas.height);
             tempHistory.push(currentState2);
             tempHistoryPointer = history.length - 1;
         }
         function undo() {
-            console.log("historyPointer="+historyPointer);
             if (historyPointer > 0) {
                 historyPointer--;
                 ctx.putImageData(history[historyPointer], 0, 0);
             }
-            //
             if (tempHistoryPointer > 0) {
                 tempHistoryPointer--;
                 tempCtx.putImageData(tempHistory[tempHistoryPointer], 0, 0);
@@ -553,8 +543,7 @@
                 isRectangle = false;
                 isText = false;   
                 ButtonActive();   
-                document.getElementById('CheckModal').style.display = 'block'; 
-                saveState();            
+                document.getElementById('CheckModal').style.display = 'block';          
             } else{
                 openNoticeModal();
             }             
@@ -574,8 +563,23 @@
             redrawCanvas();  
             ButtonActive(); 
             document.getElementById('undo').style.display='none';
-            document.getElementById('redo').style.display='none';                            
-        }                
+            document.getElementById('redo').style.display='none';    
+            console.log("繪圖結束");                        
+        }     
+        function CancleDraw(){
+            document.getElementById('CheckModal').style.display = 'none'; 
+            isdrawLine = false;
+            isDrawingLine = false;
+            checkDraw = false;
+            // 保存繪製的圖層
+            history.length = 0; //清空歷史紀錄
+            tempCtx.clearRect(0, 0, tempCanvas.width, tempCanvas.height);
+            points.length = 0;        
+            redrawCanvas();  
+            ButtonActive(); 
+            document.getElementById('undo').style.display='none';
+            document.getElementById('redo').style.display='none'; 
+        }           
         function drawLine(context, x1, y1, x2, y2) {
             context.beginPath();   
             context.strokeStyle = `${color}`;
@@ -647,6 +651,7 @@
                 }
             }else {
                 isTextElement.classList.remove("active");
+                document.getElementById('TextModal').style.display = 'none';
                 document.getElementById('undo').style.display='none';
                 document.getElementById('redo').style.display='none';  
             }
@@ -666,6 +671,11 @@
             }else {
                 document.getElementById('CheckModal').style.display = 'none'; 
                 isdrawLineElement.classList.remove("active");
+            }
+            if(isaddOverlay){
+                if(checkDraw){
+                    CancleDraw();                                       
+                }
             }
         }
         //初始圖片
@@ -796,6 +806,13 @@
                 ctx.restore();                     
             }                   
         }     
+        function status(){
+            isText = false;
+            isRectangle = false;
+            isdrawLine = false;
+            isaddOverlay = true;
+            ButtonActive();                  
+        }
         /*---------------------------------------------------------------------------------------------------------------------*/                
         /*------------------------------------------------------功能圖示按鈕繪畫---------------------------------------------------------------------------*/        
         function drawScaleHandle(x, y) {
@@ -877,7 +894,6 @@
             ctx.stroke();
             ctx.closePath();
         }
-
         function deleteSelectedOverlay() {
             if (selectedOverlayIndex !== -1) {
                 overlayImages.splice(selectedOverlayIndex, 1);
@@ -930,6 +946,8 @@
         //document.getElementById('cropImage').addEventListener('click', cropImage);
         //document.getElementById('zoomIn').addEventListener('click', zoomInImage);
         //document.getElementById('zoomOut').addEventListener('click', zoomOutImage);
+        //新增圖層時
+        document.getElementById('addOverlayImage').addEventListener('click',status);
         //文字編輯功能
         document.getElementById('drawTextButton').addEventListener('click',EditText);
         document.getElementById('addText').addEventListener('click',addText);
@@ -939,6 +957,7 @@
         //繪圖
         document.getElementById('drawLine').addEventListener('click',IsdrawLine);
         document.getElementById('Check').addEventListener('click',CheckModal);
+        document.getElementById('CancleDraw').addEventListener('click',CancleDraw)
         document.getElementById('drawFinishYES').addEventListener('click',drawFinishYES);
         document.getElementById('drawFinishNO').addEventListener('click',drawFinishNO);
         //關閉提醒框
@@ -950,14 +969,10 @@
         document.getElementById('redo').addEventListener('click',redo);
         //存檔
         document.getElementById('saveImage').addEventListener('click',saveImage);
-
+        //事件監聽
         canvas.addEventListener('mousedown', handleMouseDown);
         canvas.addEventListener('mouseup', handleMouseUp);
-        canvas.addEventListener('mousemove', handleMouseMove);
-        //canvas.addEventListener('click', handleMouseClick);
-        //canvas.addEventListener('mouseenter', handleMouseEnter);
-        //canvas.addEventListener('mouseleave', handleMouseLeave);
-
+        canvas.addEventListener('mousemove', handleMouseMove);   
         
         }
     </script>
@@ -1126,9 +1141,15 @@
         margin: 10px;
     }
     #Check{
-        border:none; padding: 0.3rem 0.5rem; background-color: #ffdfa0; border:1px solid #fbbb3c;
+        border:none; padding: 0.3rem 0.5rem; background-color: #ffdfa0; border:1px solid #fbbb3c;border-radius: 0.3rem;
     }
     #Check:hover{
+        background-color: #FBBB3C;
+    }
+    #CancleDraw{
+        border:none; padding: 0.3rem 0.5rem; background-color: #ffffff; border:1px solid #fbbb3c;border-radius: 0.3rem;
+    }
+    #CancleDraw:hover{
         background-color: #FBBB3C;
     }
     
@@ -1276,12 +1297,11 @@
             </div>    
             <div style="width: 100%;position: relative;"><!--若未載入底圖跳出提醒-->
                 <div  id="CheckModal"  style="position: fixed;top: 20% ;left: 50%; display: none;z-index: 1060; text-align: center;   ">
-                    <div style="position: relative;display: flex;flex-direction: column;width: 100%;pointer-events: auto;background-color: #fff;
-                    background-clip: padding-box;
-                    border: 1px solid rgba(0,0,0,.2);
-                    border-radius: 0.3rem;padding: 0rem;
+                    <div style="position: relative;display: flex;flex-direction: column;width: 100%;pointer-events: auto;background-color: rgba(255, 255, 255, 0);
+                    background-clip: padding-box;border-radius: 0.3rem;
+                    padding: 0rem;
                     outline: 0;">
-                        <div><button type="button" id="Check">繪圖完成 v </button></div>
+                        <div><button type="button" id="Check">繪圖完成 v </button><button type="button" id="CancleDraw">取消繪圖 </button></div>
                     </div>
                     
                 </div>
