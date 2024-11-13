@@ -1,4 +1,5 @@
 import time
+from datetime import datetime
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.options import Options
@@ -17,17 +18,35 @@ driver.get('https://tw.shp.ee/1Qn345q')
 #測試連結
 #driver.get('https://shopee.tw/Little-Fun-%E0%AA%A6-%E1%B5%95%CC%88-%E0%AB%A9%E3%80%90%E5%8F%B0%E7%81%A3%E7%8F%BE%E8%B2%A8%E3%80%91%E5%92%96%E5%95%A1%E7%AC%91%E8%87%89-%E8%A7%A3%E5%A3%93%E7%90%83-%E6%AF%9B%E7%B5%A8%E5%B0%8F%E5%85%AC%E4%BB%94-%E7%8E%A9%E5%81%B6-%E6%89%8B%E6%8D%8F%E5%AE%89%E6%92%AB%E7%8E%A9%E5%85%B7-%E8%A7%A3%E5%A3%93%E6%8B%BF%E6%8D%8F-%E5%92%96%E5%95%A1%E7%90%83-%E5%B0%8F%E5%85%AC%E4%BB%94-i.1081838456.23786408698?xptdk=1adff70f-74bb-48b2-b31d-aecf8f540222')
 
-# 等"直接購買"available後點選
-def do():
+
+# 設定目標時間
+target_time = "09:59"  # 格式必須為 HH:MM
+
+def wait_for_target_time():
+    while True:
+        current_time = datetime.now().strftime("%H:%M")
+        if current_time == target_time:
+            print("目標時間到了！開始重刷頁面。")
+            break
+        else:
+            time.sleep(1)  # 每秒檢查一次
+
+def refresh_until_buy_button():
     while True:
         try:
-            WebDriverWait(driver, 1200).until(EC.element_to_be_clickable((By.XPATH, '//button[contains(text(),"直接購買")]'))).click()
-            print('------do 直接購買')
-            break  # 找到並點擊後跳出循環
-        except:
-            print('找不到"直接購買"按鈕，繼續嘗試...')
+            # 每 0.1 秒重刷一次頁面
+            time.sleep(0.1)
             driver.refresh()
-            time.sleep(1)  # 稍微等待避免過於頻繁
+            
+            # 檢查購買按鈕是否出現，假設按鈕文字為“直接購買”
+            buy_button = WebDriverWait(driver, 0.1).until(
+                EC.element_to_be_clickable((By.XPATH, '//button[contains(@class, "btn-solid-primary")]'))
+            )
+            buy_button.click()
+            print("成功點擊購買按鈕！")
+            break
+        except:
+            print("按鈕尚未出現，繼續重刷。")
 
 # 等"去買單"available後點選，需強制睡一秒最順
 def do2():
@@ -108,7 +127,9 @@ def do5():
 
 
 # 執行所有步驟
-do()
+# 等到目標時間，開始重刷瀏覽器
+wait_for_target_time()
+refresh_until_buy_button()
 do2()
 click_cash_on_delivery()
 #handle_popup()
