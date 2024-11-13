@@ -20,11 +20,16 @@ driver.get('https://tw.shp.ee/1Qn345q')
 
 
 # 設定目標時間
-target_time = "09:59"  # 格式必須為 HH:MM
+target_time = "09:59:55"  # 格式必須為 HH:MM
+right_time = "10:00:00" 
+# 定義截圖函式
+def take_screenshot(filename="screenshot.png"):
+    driver.save_screenshot(filename)
+    print(f"已截圖並儲存為 {filename}")
 
 def wait_for_target_time():
     while True:
-        current_time = datetime.now().strftime("%H:%M")
+        current_time = datetime.now().strftime("%H:%M:%S")
         if current_time == target_time:
             print("目標時間到了！開始重刷頁面。")
             break
@@ -33,7 +38,10 @@ def wait_for_target_time():
 
 def refresh_until_buy_button():
     while True:
-        try:
+        try:        
+            current_time = datetime.now().strftime("%H:%M:%S")
+            if current_time == right_time:
+                take_screenshot("screenshot_10_00_00.png")    
             # 每 0.1 秒重刷一次頁面
             time.sleep(0.1)
             driver.refresh()
